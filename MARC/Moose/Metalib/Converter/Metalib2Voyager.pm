@@ -49,6 +49,9 @@ has additions => (is => 'ro', isa => 'ArrayRef', builder => '_build_additions' )
 #
 has table => (is => 'ro', isa => 'HashRef[ArrayRef]', builder => '_build_optable' );
 
+has seen856 => (is => 'rw', isa => 'HashRef', default => sub { {} } );
+has f856 =>    (is => 'rw', isa => 'HashRef', default => sub { {} } );
+
 sub _build_urlvalidator {
     return Data::Validate::URI->new();
 } 
@@ -124,7 +127,7 @@ my $isilIds = {
 #    'HY' =>		[qw(FI-H3 FI-Hb FI-Hc FI-HELKA FI-Hh FI-Hhant FI-Hhkki FI-Hhlitt FI-Hhmus FI-Hhsuo
 #			    FI-Hhtai FI-Hhu38 FI-Hk FI-Hl FI-Hlham FI-Hlhlm FI-Hloik FI-Hmetm FI-Hmkti FI-Ho
 #			    FI-Hq FI-Hs FI-Ht FI-Hul FI-Hv FI-Hxai)],
-    'HY' =>		[qw(FI-Hul Fi-Hq)],  # just a guess on Sep 13, 2016
+    'HY' =>		[qw(FI-Hul)],  		# agreed with Maria Kovero on Sep 27, 2016
 #    'JAMK' =>		[qw(FI-Jadyn FI-Jakir FI-Jaluo FI-Jamus)],
     'JAMK' =>		[qw(FI-Jakir)], 	# agreed with Tuija Ylä-Sahra on Sep 19, 2016
 #    'JY' =>		[qw(FI-J FI-Jmus FI-Jx)],
@@ -210,7 +213,7 @@ sub _build_additions {
 	    'tag' => '336', 
 	    'ind1' => ' ', 
 	    'ind2' => ' ',
-	    'subf' => [['a', "1 teksti"], ['b', 'txt'], ['2', 'rdacontent']],
+	    'subf' => [['a', "teksti"], ['b', 'txt'], ['2', 'rdacontent']],
 	},
 	{
 	    'tag' => '337', 
@@ -250,7 +253,9 @@ sub initialise {
     return 0 unless defined $s; # there is a handful of empty records in the data
     $s = $s->value();		# (but the reader now skips them)
     $self->recordid($s);
-#    $self->ui_link_seen(0);
+
+    $self->seen856( { '1' => {}, '2' => {}, '9' => {} } );
+    $self->f856( { '1' => [], '2' => [], '9' => [] } );
 
     $s = $rec->field('AF1');
     $s = $s->subfield('a');
@@ -288,6 +293,7 @@ sub finish {
     my($self, $flist) = @_;
     my ($s, $e, $tmp);
     my ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
+    my $links;
 
     if(scalar(grep { $_->{'tag'} eq '041' } @{$flist}) > 1) {
 	$e = $self->inst008();
@@ -303,12 +309,15 @@ sub finish {
 	    )
 	);
 
-    # Must remove duplicate 856 fields here before reporting link problems and sorting the fields
-    ($s, $flist) = $self->_dedup856($flist);
+    ($s, $links) = $self->process856set();
 
     if($s) {
 	($e) = grep { $_->{'tag'} eq '988' } @{$flist};
-	$e = MARC::Moose::Field::Std->new('tag' => '988') unless defined($e); # could happen if STA had a broken value
+	# just in case orig STA was broken
+	unless(defined($e)) {
+	    $e = MARC::Moose::Field::Std->new('tag' => '988');
+	    push(@{$flist},  $e);
+	}
 	if((not defined($tmp = $e->subfield('a'))) || $tmp eq 'ACTIVE') {
 	    $e->subf( [ [ 'a', 'INACTIVE' ] ] );
 	    $e->ind1(0);
@@ -317,7 +326,7 @@ sub finish {
 			"link for human UI, setting it to inactive state.");
 	}
     }
-    return sort { $a->{'tag'} cmp $b->{'tag'} } @{$flist};
+    return sort { $a->{'tag'} cmp $b->{'tag'} } (@{$flist}, @{$links});
 }
 #
 #   Parameters: ref to list of all fields in record
@@ -326,185 +335,130 @@ sub finish {
 #
 # If there are several different links for each ind2 value of 856 fields, we'll choose one and store
 # the other ones in 500 fields.  Field instance order and link validity count in our choice.  
-# If there is no syntactically correct UI link, we'll set the record to inactive state.
-sub _dedup856 {
+# If first instance of UI link is not syntactically correct, we'll set the record to inactive state.
+#
+sub process856set {
     my $self = shift;
+    my $fields = $self->f856();
     my @res = ();
-    my @others = ();
-    my @uniq0 = ();
-    my @uniq2a = ();
-    my @uniq2u = ();
-    my %seen = ('0' => {}, 'a' => {}, 'u' => {});
-    my $report = '';
-    my $s = '';
-    my $status;
-    my $total = 0;
-    my $i;
+    my ($s, $i, $f);
+    my $nelliseen = 'Field 856 mentions nelliportaali, please review it.';
+    my $badurlu = "Questionable format of url in field 856 \$u, please check and correct if needed:\n\t\t    ";
+    my $badurla = "Questionable format of url in field 856 \$a, please check and correct if needed:\n\t\t    ";
+    my $v = $self->urlvalidator();
+    my %labels = ('1' => 'UI', '2' => 'publisher', '9' => 'database guide');
     
-    
-    map {
-	if($_->{'tag'} eq '856') {
-	    if($_->{'ind2'} eq '0') {
-		$s = $_->subfield('u');
-		push(@uniq0, $_) unless $seen{'0'}->{$s}++;
-	    }
-	    elsif(defined($s = $_->subfield('u'))) { 	# ind2 == 2
-		push(@uniq2u, $_) unless $seen{'u'}->{$s}++;
-	    }
-	    else {
-		$s = $_->subfield('a');
-		push(@uniq2a, $_) unless $seen{'a'}->{$s}++;
+    if(0) {  # BUGABOO!
+	print STDOUT "856 fields:\n";
+	foreach $i (sort keys %labels) {
+	    foreach $f (@{$fields->{$i}}) {
+		print STDOUT $f->as_formatted(), "\n";
 	    }
 	}
-	else {
-	    push(@others, $_);
-	}
-    } @{$_[0]};
-    if(0) {
-	$s = '';
-	map { $s .= $_->as_formatted() . " "; } @uniq0;
-	print STDOUT "uniq0: ", $s, "\n";
-	$s = '';
-	map { $s .= $_->as_formatted() . " "; } @uniq2a;
-	print STDOUT "uniq2a: ", $s, "\n";
-	$s = '';
-	map { $s .= $_->as_formatted() . " "; } @uniq2u;
-	print STDOUT "uniq2u: ", $s, "\n", '-' x 20, "\n";
     }
-    unless(scalar @uniq0) {
-	@res = (@others, @uniq0, @uniq2a, @uniq2u);  # this approach does not preserve order of 856 instances
-	return (1, \@res);	 	    # hoping the error potential is minimal with the actual data
-    }					    # but the librarian will have to review the record anyway
-    # There are often invalid urls in the data, so detect and report them.  
-    $s = '';
-    foreach $i ([\@uniq0, 'u'],  [\@uniq2a, 'a'],  [\@uniq2u, 'u']) {
-	next unless scalar @{$i->[0]};
-	($status, $s) = $self->_purify856list($i->[1], $i->[0]);
-	$report .= $s;
-	$total = $status unless $total == 2;
-    }
-    $self->info("more than one UI link in record, please review and verify correctness") if(scalar @uniq0 > 1);
-    if(0) {
-	$s = '';
-	map { $s .= $_->as_formatted() . " "; } @uniq0;
-	print STDOUT "uniq0: ", $s, "\n";
-	$s = '';
-	map { $s .= $_->as_formatted() . " "; } @uniq2a;
-	print STDOUT "uniq2a: ", $s, "\n";
-	$s = '';
-	map { $s .= $_->as_formatted() . " "; } @uniq2u;
-	print STDOUT "uniq2u: ", $s, "\n", '-' x 60, "\n";
+    return (1, [@{$fields->{'2'}}, @{$fields->{'9'}}]) unless(scalar @{$fields->{'1'}});
+    unless(defined($v->is_web_uri($s = $fields->{'1'}[0]->subfield('u')))) {
+	$self->info("Questionable format of database UI url in field 856 \$u, ". 
+		    "please check and correct if needed:\n\t\t    $s");
+	return (2, [@{$fields->{'1'}}, @{$fields->{'2'}}, @{$fields->{'9'}}]);
     }
 
-    @res = (@others, @uniq0, @uniq2u, @uniq2a);
-    push(@res, (MARC::Moose::Field::Std->new(
+    foreach $i (sort keys %labels) {
+	$self->info("more than one $labels{$i} link in record, please review and verify correctness") 
+	    if (scalar @{$fields->{$i}}) > 1;
+
+	# There are often invalid urls in the data, so detect and report them;
+	# also detect links to Nelliportaali.
+	foreach $f (@{$fields->{$i}}) {
+	    if(defined($s = $f->subfield('u'))) {
+		$self->info($nelliseen) if $s =~ m/nelliportaali/gio;
+		$self->info($badurlu . $s) if not defined($v->is_web_uri($s));
+	    }
+	    if($i eq '2') {
+		if(defined($s = $f->subfield('a'))) {
+		    $self->info($nelliseen) if $s =~ m/nelliportaali/gio;
+		    $self->info($badurla . $s) if not defined($v->is_web_uri($s));
+		}
+	    }
+	}
+    }
+    return (0, [@{$fields->{'1'}}, @{$fields->{'2'}}, @{$fields->{'9'}}]) 
+	unless $self->extra_856_to_500() && 
+	(scalar @{$fields->{'1'}} > 1 || scalar @{$fields->{'2'}} > 1 || scalar @{$fields->{'9'}} > 1);
+
+    $self->info("Moving contents of extra 856 fields into one 500 field.");
+    @res = (shift @{$fields->{'1'}});
+    push(@res, $s) if defined($s = shift @{$fields->{'2'}});
+    push(@res, $s) if defined($s = shift @{$fields->{'9'}});
+
+    $s = '';
+    foreach $i (sort keys %labels) {
+	map { $s .= $_->as_formatted() . "\n"; } @{$fields->{$i}};
+    }
+    push(@res, MARC::Moose::Field::Std->new(
 		    'tag' => '500', 
 		    'ind1' => ' ',
 		    'ind2' => ' ',
 		    'subf' => [ ['a', 
-				 "Converter found the following (extra) 856 instances in the record:\n". $report
+				 "Converter found the following (extra) 856 instances in the record:\n". $s
 				] 
 		    ]
-		))
-	) if $report ne '' && $self->extra_856_to_500();
-    return ($total, \@res);
+		)
+	);
+    return (0, \@res);
 }
 
-
-# Arranges subfields so that the valid one comes first if one exists.  
-# All others are left intact or reported in a 500 field if requested.
-# Parameter list of fields is always non-empty.
-# Returns report of found 856 fields in a string.
-sub _purify856list {
-    my ($self, $subf, $flds) = @_;
-    my ($chosen, $s, $status);
-    my @f = ();		# those instances whose url failed the test
-    my @r;
-    my $extraurls = '';
-
-    if(1){
-	$status = 0;
-	map {
-	    $s = $_->subfield($subf);
-	    $self->info('Field 856 mentions nelliportaali, please review it.') if($s =~ m/nelliportaali/gio);
-	    unless(defined $self->urlvalidator->is_web_uri($s)) {
-		$self->info("Questionable format of url in field 856 \$$subf". 
-			    ", please check and correct if needed:\n\t\t    " . $s);
-		$status = 2;
-	    }
-	} @{$flds};
-    }
-    else {
-	@r = grep { 
-	    $s = $_->subfield($subf);
-	    if(defined $self->urlvalidator->is_web_uri($s)) {
-		1;
-	    }
-	    else {
-		$self->info("Questionable format of url in field 856 \$$subf". 
-			    ", please check and correct if needed:\n\t\t    " . $s);
-		push @f, $_;
-		0;
-	    }
-	} @{$flds};
-	
-	($chosen, $status) = ((scalar @r) ? (shift(@r), 0) : (shift(@f), 2));
-
-	print STDOUT "chose ", $chosen->as_formatted(), ", status: $status\n", '-' x 20, "\n";
-	$s = '';
-	if(scalar(@r) + scalar(@f)) {
-	    if($self->extra_856_to_500()) {
-		$self->info("... reporting extra 856 fields in one 500 field");
-		map {
-		    $s .= $_->as_formatted() . "\n";
-		} @{$flds};
-		@{$flds} = ();
-	    }
-	}
-	else {
-	    @{$flds} = (@r, @f); # this will reorder the fields but hopefully the risk of confusion is marginal
-	}
-	unshift @{$flds}, $chosen;
-    }
-    return ($status, $s);
-}
-
+#
 #   In field 856, indicator 1 is always 4.  Those fields whose indicator 2 is 3,4,5, or 6 will be removed.
 #   Subfield s is the result of an error in Metalib and will be removed.
-#   Most of the a subfields appear in a field that also has subfield u, and i2 is always 2 when subfield a is present.
+#   Most of the a subfields appear in a field that also has subfield u, and i2 is always 2 when 
+#   subfield a is present.
+#
 sub do856 {
     my ($self, $fld, $rec, $param) = @_;
     my @subs = ();
-    my ($s, @ua, $i2, $url);
+    my ($u, $a, $i2, $s);
+    my $seen = $self->seen856();
+    my $links = $self->f856();
 
     $i2 = $fld->ind2();
-    if($i2 eq '1' || $i2 eq '9' || $i2 eq  '2') {	
-	# Usually there is only one subfield, $u.  $a is sometimes seen too.
-	# We must remove the erroneous subfield s (ind2 == 1).
-
-	@subs = @{$fld->subf()};
-
-	@ua = grep {$_->[0] =~ m/^[au]$/o} @subs; 
-
-	unless(scalar @ua) {
+    if($i2 eq '1' || $i2 eq '9') {
+	# With these i2 values, there should be only one subfield, $u.
+	# Other subfields may appear as produced by a Metalib bug.  We'll remove them.
+	$u = $fld->subfield('u');
+	unless(defined $u) {
 	    $self->ok(0);
-	    $self->error("no subfield a or u in field 856 with ind2=$i2");
+	    $self->error("no subfield u in field 856 with ind2=$i2");
+	    return ($fld);	# this instance is broken, we'll keep it as is for later investigation
+	}
+	return () if $seen->{$i2}{$u}++;  # drop duplicates
+	@subs = ( ['u', $u], ['y', $i2 eq '1' ? "Database Interface" : "Database Guide"]);
+	$fld->ind2($i2 eq '1' ? 0 : 2) ;  # i2=9 will be set to 2
+	$fld->subf(\@subs);
+	push(@{$links->{$i2}}, $fld);	  # store for later processing
+    }
+    elsif($i2 eq  '2') {	
+	#  The publisher 856 field may have $a for server, $u for url, or both.
+	$u = $fld->subfield('u');
+
+	$a = $fld->subfield('a');
+	$s = (defined($a) ? "a:$a" : '');
+	$s .= (($s ne '' && defined($u)) ? "##u:$u" : (defined($u) ? "u:$u" : ''));
+	
+	if($s eq '') {
+	    $self->ok(0);
+	    $self->error("neither subfield u nor subfield a in field 856 with ind2=2");
 	    return ($fld);
 	}
-	@subs = @ua;
+	return () if $seen->{$i2}{$s}++;  # drop duplicates
 
-	if($i2 eq '1' || $i2 eq '9') { 
-	    push(@subs, ['y', $i2 eq '1' ? "Database Interface" : "Database Guide"]);
-	}
-
-	$fld->ind2($i2 eq '1' ? 0 : 2) ; # i2=9 will be set to 2
+	push(@subs, ['a', $a]) if(defined($a) && ($a ne ''));
+	push(@subs, ['u', $u]) if(defined($u) && ($u ne ''));
+	$fld->ind2('2') ;  
 	$fld->subf(\@subs);
+	push(@{$links->{'2'}}, $fld);
     }
-    else {
-	# remove other 856 instances, no need for logging
-	return ();
-    }
-    return ($fld);
+    return ();  # other 856 fields are skipped
 }
 
 #

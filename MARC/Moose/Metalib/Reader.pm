@@ -61,7 +61,7 @@ MARC::Moose::Metalib::Reader - File reader for Metalib export file (pseudo-MARCX
 
 =head1 VERSION
 
-version 1.0.32
+version 0.1.0
 
 =head1 DESCRIPTION
 

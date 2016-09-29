@@ -6,7 +6,6 @@ use Moose::Role;
 use MARC::Moose::Record;
 use MARC::Moose::Field::Control;
 use MARC::Moose::Field::Std;
-#use MARC::Moose::Metalib::Converter::Metalib2Voyager;
 use MARC::Moose::Metalib::Converter::Logfile;
 
 has ok       => (is => 'rw', isa => 'Bool');			
