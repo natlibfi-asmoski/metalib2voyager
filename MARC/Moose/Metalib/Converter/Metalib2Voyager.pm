@@ -5,6 +5,7 @@ $MARC::Moose::Metalib::Converter::Metalib2Voyager::VERSION = '0.1.0';
 #use Readonly;
 use Encode qw(decode);
 use Moose;
+use NelliISIL;
 use MARC::Moose::Record;
 use MARC::Moose::Field::Control;
 use MARC::Moose::Field::Std;
@@ -18,6 +19,9 @@ has val007       => (is => 'rw', isa => 'Str', default => 'cr||||||||||||');
 has extra_856_to_500 => (is => 'rw', isa => 'Bool', default => 0);
 has swap210_245  =>  (is => 'rw', isa => 'Bool', default => 0);
 has droplangcodes => (is => 'rw', isa => 'Bool', default => 1);
+has has_ftl => (is => 'rw', isa => 'Bool', default => 0);
+has ui_url => (is => 'rw', isa => 'Str', default => '');
+has isil_table => (is => 'rw', isa => 'NelliISIL');
 
 #  008 field:
 #  ----------
@@ -82,7 +86,7 @@ sub _build_optable {
 	'AF1' => [ \&af1,    {}, ],
 	'CAT' => [ \&drop,   {}, ],  # could drop these already in initialise()
 	'CKB' => [ \&drop,   {}, ],  # for the time being; have to figure out FTL handling first
-	'FTL' => [ \&drop,   {}, ],  # for the time being
+	'FTL' => [ \&ftl,   {}, ],  # 
 	'LCL' => [ \&simple, { 't' => '989',	      'i2' => ' ' } ],
 	'STA' => [ \&doSTA,  {}, ],  # 988; will be used as filtering value in Voyager harvesting
     };
@@ -107,97 +111,6 @@ sub BUILD {
     }
     binmode($log->fh(), ":encoding(UTF-8)");
 }
-
-my $isilIds = {
-#    'AA' =>		[qw(FI-Abo FI-Abo-ASA FI-Abo-ICT FI-Åh FI-Åx)],
-    'AA' =>		[qw(FI-Abo)],
-    'ARCADA' =>		[qw(FI-Arcada)],	# agreed with Ann-Kristin Åvall on Sep 21, 2016
-#    'DIAK' =>		[qw(FI-Diak FI-Diao FI-Diap FI-Diaa)],
-    'DIAK' =>		[qw(FI-Diak)],		# agreed with Hanna Saario on Sep 23, 2016
-    'EKAMK' =>		[qw(FI-Ekaic FI-Ekaim FI-Ekals FI-Ekalt)],
-    'EVTEK' =>		[qw(FI-Metag FI-Metbu FI-Metha FI-Metko FI-Metle FI-Metmy 
-                            FI-Meton FI-Metpo FI-Metso FI-Metti FI-Mettu FI-Metvi)],
-    'HAAGA' =>		[qw(FI-Hihi)],
-    'HAAGA-HELIA' =>	[qw(FI-Helib FI-Helip FI-Hihli FI-Himli FI-Hivli)],
-#    'HAMK' =>		[qw(FI-Hamk FI-Hamk-F FI-Hamk-La FI-Hamk-Le FI-Hamk-M FI-Hamk-E FI-Hamk-R FI-Hamkv)],
-    'HAMK' =>		[qw(FI-Hamk)],  	# agreed with Jarmo Loponen on Sep 8, 2016
-#    'HKKK' =>		[qw(FI-K FI-Aalto)],
-    'HKKK' =>		[qw(FI-Aalto)],		# agreed with Mari Aaltonen on Sep 23, 2016
-    'HUMAK' =>		[qw(FI-Humal FI-Humki FI-Humks FI-Humku FI-Humpa FI-Humpk FI-Humps FI-Humta)],
-#    'HY' =>		[qw(FI-H3 FI-Hb FI-Hc FI-HELKA FI-Hh FI-Hhant FI-Hhkki FI-Hhlitt FI-Hhmus FI-Hhsuo
-#			    FI-Hhtai FI-Hhu38 FI-Hk FI-Hl FI-Hlham FI-Hlhlm FI-Hloik FI-Hmetm FI-Hmkti FI-Ho
-#			    FI-Hq FI-Hs FI-Ht FI-Hul FI-Hv FI-Hxai)],
-    'HY' =>		[qw(FI-Hul)],  		# agreed with Maria Kovero on Sep 27, 2016
-#    'JAMK' =>		[qw(FI-Jadyn FI-Jakir FI-Jaluo FI-Jamus)],
-    'JAMK' =>		[qw(FI-Jakir)], 	# agreed with Tuija Ylä-Sahra on Sep 19, 2016
-#    'JY' =>		[qw(FI-J FI-Jmus FI-Jx)],
-    'JY' =>		[qw(FI-J)],		# agreed with Hannu Markkanen on Sep 22, 2016
-    'KAJAK' =>		[qw(FI-Kamk)],
-    'KPAMK' =>		[qw(FI-Kphum FI-Kpkk FI-Kptes)],
-    'KTAMK' =>		[qw(FI-Ktah FI-Ktai FI-Ktao FI-Ktat)],
-#    'KUVA' =>		[qw(FI-Tx FI-ARSCA)],    # BTW, KUVA is obsolete, SIBA is used for KUVA and TEAK
-    'KUVA' =>		[qw(FI-Tx FI-Sib FI-SibK FI-Teat)],    # Agreed with Erkki Huttunen on Sep 8, 2016
-    'KYAMK' =>		[qw(Fi-Kymka FI-Kymme FI-Kymte FI-Xamk)],
-    'LAUREA' =>		[qw(FI-Evahy FI-Evale FI-Evalo FI-Evalp FI-Evava FI-Laupo)],
-    'LTY' =>		[qw(FI-L)],		# agreed with Pia Paavoseppä on Sep 22, 2016
-    'LY' =>		[qw(FI-R)],
-    'MAMK' =>		[qw(FI-Mamk-M FI-Mamk-S FI-Xamk)],
-    'METROPOLIA' =>	[qw(FI-Metag FI-Metbu FI-Metha FI-Metko FI-Metle FI-Metmy FI-Meton FI-Metpo
-       			    FI-Metso FI-Metti FI-Mettu FI-Metvi)],
-    'OAMK' =>		[qw(FI-Oakau FI-Oamok FI-Oaout FI-Oasot FI-Oatek)],
-    'OY' =>		[qw(FI-Oakau FI-Ol)],
-    'PHKK' =>		[qw(FI-Lamk FI-Lakk(?) FI-Phfa FI-Phft FI-Phhe FI-Phmi FI-Phnt FI-Phot
-			    FI-Phpa FI-Phpyk FI-Phso FI-Phst)],
-    'PKAMK' =>		[qw(FI-Kareli)],
-    'RAMK' =>		[qw(FI-Rkaup FI-Rm FI-Rteku FI-Rteso)],
-    'SAMK' =>		[qw(FI-Samk0 FI-Samk1 FI-Samk2 FI-Samk4 FI-Samk5 FI-Samk6 FI-Samk8 FI-Samk9 FI-Ttp)],
-    'SAVONIA' =>	[qw(FI-Pssti FI-Psstk FI-Pstek FI-Pstew)],
-#    'SEAMK' =>		[qw(FI-Sekor FI-Sekau FI-Sekäs FI-Semaa FI-Semet FI-Serav FI-Seter)],
-    'SEAMK' =>		[qw(FI-Sekor)],		# agreed with Jarkko Meronen on Sep 22, 2016
-    'SHH' =>		[qw(FI-Z)],
-    'SIBA' =>		[qw(FI-Tx FI-Sib FI-SibK FI-Teat)],    # Agreed with Erkki Huttunen on Sep 8, 2016
-#    'SIBA' =>		[qw(FI-Sib FI-SibK FI-ARSCA)],  
-    'STADIA' =>		[qw(FI-Metag FI-Metbu FI-Metha FI-Metko FI-Metle FI-Metmy FI-Meton
-			    FI-Metpo FI-Metso FI-Metti FI-Mettu FI-Metvi)],
-#    'SYH' =>		[qw(FI-Vaz FI-Vaz-Jstad)],
-    'SYH' =>		[qw(FI-Vaz)],		# agreed with Christian Nelson on Sep 12, 2016
-#    'TAIK' =>		[qw(FI-Ta FI-Aalto)],
-    'TAIK' =>		[qw(FI-Aalto)],		# agreed with Mari Aaltonen on Sep 23, 2016
-#    'TAMPERE' =>	[qw(FI-Tamk FI-Tamkt)],
-    'TAMPERE' =>	[qw(FI-Tamk)],		# agreed with Hannu Hahto on Sep 23, 2016
-    'TAY' =>		[qw(FI-Y FI-Yh FI-Yk FI-Yl FI-Yx)],
-#    'TEAK' =>		[qw(FI-Teat FI-ARSCA)],  # BTW, TEAK is obsolete, SIBA is used for KUVA and TEAK
-    'TEAK' =>		[qw(FI-Tx FI-Sib FI-SibK FI-Teat)],    # Agreed with Erkki Huttunen on Sep 8, 2016
-#    'TKK' =>		[qw(FI-P FI-P-ETA FI-P-IL FI-P-KM FI-P-TFM FI-Aalto)],
-    'TKK' =>		[qw(FI-Aalto)],		# agreed with Mari Aaltonen on Sep 23, 2016
-    'TTY' =>		[qw(FI-Tt FI-Ttk)],
-#    'TUAMK' =>		[qw(FI-Tua FI-Tual FI-Tuas FI-Tuau FI-Tule FI-tuli FI-Turu FI-Tuse)],
-    'TUAMK' =>		[qw(FI-Tua)],  		# agreed with Liisa Tiittanen on Sep 14, 2016
-    'TUKKK' =>		[qw(FI-F)],
-#    'TY' =>		[qw(FI-Ta FI-Tl FI-To FI-Tpo FI-Tro FI-Tyyk)],
-    'TY' =>		[qw(FI-T)], 		# Agreed with Jouni Aaltonen on Sep 12, 2016
-#    'UEF' =>		[qw(FI-Jo FI-Jok FI-Jom FI-Jos FI-Jox FI-Ku)],
-    'UEF' =>		[qw(FI-Ku)],		# agreed with Harri Kalinen on Sep 7, 2016
-    'VAMK' =>		[qw(FI-Vamk)],		# agreed with Christian Nelson on Sep 12, 2016
-#    'VY' =>		[qw(FI-Vaz)], 
-    'VY' =>		[qw(FI-V)],		# agreed with Christian Nelson on Sep 12, 2016
-#   Public libraries
-    'E-KARJALA' =>	[qw(FI-Unknown)],   	# dummies at the moment
-    'ETELA-SAVO' =>	[qw(FI-Unknown)],
-    'ITA-UUSIMAA' =>	[qw(FI-Unknown)],
-    'KANTA-HAME' =>	[qw(FI-Unknown)],
-    'KESKI-SUOMI' =>	[qw(FI-Unknown)],
-    'KYMENLAAKSO' =>	[qw(FI-Unknown)],
-    'PAIJAT-HAME' =>	[qw(FI-Unknown)],
-    'PIRKANMAA' =>	[qw(FI-Unknown)],
-    'P-KARJALA' =>	[qw(FI-Unknown)],
-    'POHJANPORTTI' =>	[qw(FI-Unknown)],
-    'POHJOIS-SAVO' =>	[qw(FI-Unknown)],
-    'PORSTUA' =>	[qw(FI-Unknown)],
-    'SATAKUNTA' =>	[qw(FI-Unknown)],
-    'UUSIMAA' =>	[qw(FI-Unknown)],
-    'VARS-SUOMI' =>	[qw(FI-Unknown)],
-};
 
 sub _build_additions {
     my @fields;
@@ -253,6 +166,7 @@ sub initialise {
     return 0 unless defined $s; # there is a handful of empty records in the data
     $s = $s->value();		# (but the reader now skips them)
     $self->recordid($s);
+    $self->has_ftl(0);
 
     $self->seen856( { '1' => {}, '2' => {}, '9' => {} } );
     $self->f856( { '1' => [], '2' => [], '9' => [] } );
@@ -276,14 +190,6 @@ sub initialise {
     $self->inst008($s);
     1;
 }
-
-sub getIsilIds { 
-    my ($self, $mlId) = @_;
-
-    return undef unless exists $isilIds->{$mlId};
-    return  $isilIds->{$mlId};
-}
-
 
 #   
 #   Fill in the value of the 008 field and insert it with the 007 one.
@@ -356,8 +262,11 @@ sub process856set {
 	    }
 	}
     }
+    $self->ui_url('');
     return (1, [@{$fields->{'2'}}, @{$fields->{'9'}}]) unless(scalar @{$fields->{'1'}});
-    unless(defined($v->is_web_uri($s = $fields->{'1'}[0]->subfield('u')))) {
+
+    $self->ui_url($s = $fields->{'1'}[0]->subfield('u'));
+    unless(defined($v->is_web_uri($s))) {
 	$self->info("Questionable format of database UI url in field 856 \$u, ". 
 		    "please check and correct if needed:\n\t\t    $s");
 	return (2, [@{$fields->{'1'}}, @{$fields->{'2'}}, @{$fields->{'9'}}]);
@@ -508,7 +417,7 @@ sub af1 {
 	$self->ok(0);
 	return ();
     }
-    $idList = $self->getIsilIds($mlId);
+    $idList = $self->isil_table()->getIsilIds($mlId);
     unless(defined $idList) {
 	# This shouldn't happen either
 	$self->error("unrecognised organisation id \"$mlId\", skipping field \"AF1\"");
@@ -542,7 +451,7 @@ sub do001 {
 	$self->ok(0);
 	return ();
     }
-    $idList = $self->getIsilIds($mlId);
+    $idList = $self->isil_table()->getIsilIds($mlId);
     unless(defined $idList) {
 	$self->error("unrecognised organisation id \"$mlId\", skipping field \"001\"");
 	$self->ok(0);
@@ -936,6 +845,13 @@ sub do520 {
     $fld->subf($sflds);
 
     return ($fld);
+}
+
+sub ftl {
+    my ($self, $fld, $rec, $param) = @_;
+
+    $self->has_ftl(1);
+    return ();
 }
 
 sub drop { 
