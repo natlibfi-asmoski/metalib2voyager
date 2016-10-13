@@ -1,5 +1,5 @@
 package MARC::Moose::Metalib::Converter::Metalib2Voyager;
-# ABSTRACT: Converter to make valid MARC21 from Metalib export files
+# ABSTRACT: Converter to make valid MARC21 out of Metalib export files
 $MARC::Moose::Metalib::Converter::Metalib2Voyager::VERSION = '0.1.0';
 
 #use Readonly;
@@ -13,23 +13,35 @@ use Data::Validate::URI;
 
 with 'MARC::Moose::Metalib::Converter', 'MARC::Moose::Metalib::Converter::TimeSpanParser';
 
-has urlvalidator => (is => 'rw', isa => 'Data::Validate::URI', builder => '_build_urlvalidator');
-has organisation => (is => 'rw', isa => 'Str', default => '');
-has val007       => (is => 'rw', isa => 'Str', default => 'cr||||||||||||');
-has extra_856_to_500 => (is => 'rw', isa => 'Bool', default => 0);
-has swap210_245  =>  (is => 'rw', isa => 'Bool', default => 0);
-has droplangcodes => (is => 'rw', isa => 'Bool', default => 1);
-has has_ftl => (is => 'rw', isa => 'Bool', default => 0);
-has ui_url => (is => 'rw', isa => 'Str', default => '');
-has isil_table => (is => 'rw', isa => 'NelliISIL');
-
+has urlvalidator => 	(is => 'rw', isa => 'Data::Validate::URI', builder => '_build_urlvalidator');
+has organisation =>	(is => 'rw', isa => 'Str', default => '');
+has val007 =>		(is => 'rw', isa => 'Str', default => 'cr||||||||||||');
+has has_ftl =>		(is => 'rw', isa => 'Bool', default => 0);
+has ui_url =>		(is => 'rw', isa => 'Str', default => '');
+# conversion options:
+has extra_856_to_500 => (is => 'rw', isa => 'Bool', default => 0);  #
+has swap210_245  =>	(is => 'rw', isa => 'Bool', default => 0);  #
+has droplangcodes =>	(is => 'rw', isa => 'Bool', default => 1);  #
+has language =>		(is => 'rw', isa => 'Str', default => 'fin');#
+has add245b => 		(is => 'rw', isa => 'Str', default => '');  #
+has drop_publisher =>	(is => 'rw', isa => 'Bool', default => 0);  #
+has no977 =>		(is => 'rw', isa => 'Bool', default => 0);  # must change default to TRUE later
+has infosub856 =>	(is => 'rw', isa => 'Str', default => 'y'); # y or z
+has publtext856 =>	(is => 'rw', isa => 'Str', default => '');  #
+has publcode856 =>	(is => 'rw', isa => 'Str', default => 'y'); #
+has localfields =>	(is => 'rw', isa => 'Str', default => '989'); # 
+has cat653 =>		(is => 'rw', isa => 'Bool', default => 0);  # move categories (976) to 653 fields
+has no_op_653 =>	(is => 'rw', isa => 'Bool', default => 0);  
+has langsplit_520 =>	(is => 'rw', isa => 'Bool', default => 0);  #
+has no520_9 =>		(is => 'rw', isa => 'Bool', default => 0);  #
+#
 #  008 field:
 #  ----------
 #  00-05: creation time
 #  23:    resource type, 'o' means online
 #  26:    
 #  35-37: language ('mul' by default here)
-has def008       => (is => 'ro', isa => 'Str', default =>       '                 o  j        mul  ');
+has def008       => (is => 'ro', isa => 'Str', default =>       '         xx|     o  j        mul  ');
 #							   0123456789012345678901234567890123456789
 #							             1         2         3      
 has inst008      => (is => 'rw', isa => 'Str', default => '');
@@ -41,20 +53,24 @@ has leader   =>  (is => 'rw', isa => 'Str', default => '00000nmc a       4i 4500
 # 							          1         2
 #  BTW, Finna xsl transformation set the leader to     '     nai a22     ua 4500'
 #
+has extras =>		(is => 'rw', isa => 'HashRef', default => sub { {} });
+#
 #  Additions
 #  The original Finna xsl transformation added the field 977  a Database
 #  that Finna needs to be able to show the record when browsing databases.
 #
-has additions => (is => 'ro', isa => 'ArrayRef', builder => '_build_additions' ); 
+has additions => (is => 'rw', isa => 'ArrayRef', default => sub { [] } ); 
 #
+has isil_table => (is => 'rw', isa => 'NelliISIL', default => sub { NelliISIL->new() });
+#
+has seen856 => (is => 'rw', isa => 'HashRef', default => sub { {} } );
+has f856 =>    (is => 'rw', isa => 'HashRef', default => sub { {} } );
+
 # Function parameters: ref to converter, ref to field, ref to whole record, parameter hash from the table 
 # Return value: a list of converted fields that also may be empty.  
 # The original field will be substituted by the resulting list.
 #
 has table => (is => 'ro', isa => 'HashRef[ArrayRef]', builder => '_build_optable' );
-
-has seen856 => (is => 'rw', isa => 'HashRef', default => sub { {} } );
-has f856 =>    (is => 'rw', isa => 'HashRef', default => sub { {} } );
 
 sub _build_urlvalidator {
     return Data::Validate::URI->new();
@@ -95,63 +111,138 @@ sub _build_optable {
 sub BUILD {
     my $self = shift;
     my $t = $self->table();
-
-    if($self->swap210_245()) {
-	$t->{'245'} = [ \&simple, { 't' => '210', 'i1' => '0', 'i2' => ' ' } ];
-	$t->{'210'} = [ \&do245,  { 's' => 1 }, ];
-    }
-    unless($self->droplangcodes()) {
-	delete $t->{'520'}[1]{'droplang'};
-	delete $t->{'500'}[1]{'droplang'};
-    }
+    my $s;
     my $log = $self->log();
+
     unless(defined($log) && ref($log) eq 'Marc::Moose::Metalib::Converter::Logfile') {
 	$log = MARC::Moose::Metalib::Converter::Logfile->new(file => $self->logname());
 	$self->log($log);
     }
     binmode($log->fh(), ":encoding(UTF-8)");
+
+    if($self->swap210_245()) {
+	$t->{'245'} = [ \&simple, { 't' => '210', 'i1' => '0', 'i2' => ' ' } ];
+	$t->{'210'} = [ \&do245,  { 's' => 1 }, ];
+    }
+    if($self->cat653()) {
+	$t->{'976'} = [ \&simple, { 't' => '653', 'i1' => '0', 'i2' => ' ' } ];
+    }
+    if($self->no_op_653()) {
+	$t->{'653'} = [ \&noop,   {}, ];
+    }
+    $s = $self->localfields();
+    if($s eq '500') {
+	$t->{'LCL'} = [ \&simple, { 't' => '500', 'i1' => '0', 'i2' => ' ' } ];
+    }
+    elsif($s eq 'drop') {
+	$t->{'LCL'} = [ \&drop,   {}, ];
+    }
+    elsif($s ne '989') {
+	$self->error("Unexpected tag requested for ex-Metalib local fields: \"$s\".  Using 989 for them.");
+    }
+    $s = $self->extras();
+
+    unless($self->droplangcodes()) {
+	delete $t->{'520'}[1]{'droplang'};
+	delete $t->{'500'}[1]{'droplang'};
+    }
+    $self->additions($self->_build_additions($self->language()));
 }
 
 sub _build_additions {
+    my $self = shift;
+    my $lang = shift;
+
     my @fields;
     my $f;
-    my @asrc = ( 
-	{
-	    'tag' => '300', 
-	    'ind1' => ' ', 
-	    'ind2' => ' ',
-	    'subf' => [['a', "1 verkkoaineisto"]],  # varmista!
-	},
-	{
-	    'tag' => '336', 
-	    'ind1' => ' ', 
-	    'ind2' => ' ',
-	    'subf' => [['a', "teksti"], ['b', 'txt'], ['2', 'rdacontent']],
-	},
-	{
-	    'tag' => '337', 
-	    'ind1' => ' ', 
-	    'ind2' => ' ',
-	    'subf' => [['a', decode('UTF-8', "tietokonekäyttöinen")], ['b', 'c'], ['2', 'rdamedia']],
-	},
-	{
-	    'tag' => '338', 
-	    'ind1' => ' ', 
-	    'ind2' => ' ',
-	    'subf' => [['a', "verkkoaineisto"], ['b', 'cr'], ['2', 'rdacarrier']],
-	},
-	{
-	    'tag' => '977', 
-	    'ind1' => ' ', 
-	    'ind2' => ' ',
-	    'subf' => [['a', "Database"]],
-	},
+    my %asrc = ( 
+	'fin' => [ 
+	    {
+		'tag' => '300', 
+		'ind1' => ' ', 
+		'ind2' => ' ',
+		'subf' => [['a', "1 verkkoaineisto"]],  # varmista!
+	    },
+	    {
+		'tag' => '336', 
+		'ind1' => ' ', 
+		'ind2' => ' ',
+		'subf' => [['a', "teksti"], ['b', 'txt'], ['2', 'rdacontent']],
+	    },
+	    {
+		'tag' => '337', 
+		'ind1' => ' ', 
+		'ind2' => ' ',
+		'subf' => [['a', decode('UTF-8', "tietokonekäyttöinen")], ['b', 'c'], ['2', 'rdamedia']],
+	    },
+	    {
+		'tag' => '338', 
+		'ind1' => ' ', 
+		'ind2' => ' ',
+		'subf' => [['a', "verkkoaineisto"], ['b', 'cr'], ['2', 'rdacarrier']],
+	    },
+	],
+	'swe' => [
+	    {
+		'tag' => '300', 
+		'ind1' => ' ', 
+		'ind2' => ' ',
+		'subf' => [['a', "1 onlineresurs"]],  # varmista!
+	    },
+	    {
+		'tag' => '336', 
+		'ind1' => ' ', 
+		'ind2' => ' ',
+		'subf' => [['a', "text"], ['b', 'txt'], ['2', 'rdacontent']],
+	    },
+	    {
+		'tag' => '337', 
+		'ind1' => ' ', 
+		'ind2' => ' ',
+		'subf' => [['a', 'dator'], ['b', 'c'], ['2', 'rdamedia']],
+	    },
+	    {
+		'tag' => '338', 
+		'ind1' => ' ', 
+		'ind2' => ' ',
+		'subf' => [['a', "onlineresurs"], ['b', 'cr'], ['2', 'rdacarrier']],
+	    },
+	],
+	'alllang' => [
+	    {
+		'tag' => '977', 
+		'ind1' => ' ', 
+		'ind2' => ' ',
+		'subf' => [['a', "Database"]],
+	    },
+	],
+	'ctrl' => [
+	    {
+		'tag' => '006',
+		'value' => 's|||w|o|||||||||'
+	    }
+	],
+	'extras' => {
+	    'fin' => { },
+	    'swe' => { }
+	}
 	);
 
-    foreach $f (@asrc) {
-	push(@fields, MARC::Moose::Field::Std->new($f));
-    }
-	
+    die "unknown cataloging language \"$lang\" - aborting..." unless exists $asrc{$lang}; # can be sen on cmd line...
+
+    map { push(@fields, MARC::Moose::Field::Std->new($_)); } @{$asrc{$lang}};
+
+    map { 
+	push(@fields, MARC::Moose::Field::Std->new($_)) unless $self->no977() && ($_->{'tag'} eq '977');
+    } @{$asrc{'alllang'}};
+
+    map { push(@fields, MARC::Moose::Field::Control->new($_)); } @{$asrc{'ctrl'}};
+
+    map {
+	map { push(@fields, MARC::Moose::Field::Std->new($_)); } @{$asrc{'extras'}{$_}{$lang}} 
+	if exists $asrc{'extras'}{$_};
+    } keys $self->extras();
+
     return \@fields;
 }
 
@@ -329,6 +420,7 @@ sub do856 {
     my ($u, $a, $i2, $s);
     my $seen = $self->seen856();
     my $links = $self->f856();
+    my $infosub = $self->infosub856();
 
     $i2 = $fld->ind2();
     if($i2 eq '1' || $i2 eq '9') {
@@ -341,12 +433,13 @@ sub do856 {
 	    return ($fld);	# this instance is broken, we'll keep it as is for later investigation
 	}
 	return () if $seen->{$i2}{$u}++;  # drop duplicates
-	@subs = ( ['u', $u], ['y', $i2 eq '1' ? "Database Interface" : "Database Guide"]);
+	@subs = ( ['u', $u], [$infosub, $i2 eq '1' ? "Database Interface" : "Database Guide"]);
 	$fld->ind2($i2 eq '1' ? 0 : 2) ;  # i2=9 will be set to 2
 	$fld->subf(\@subs);
 	push(@{$links->{$i2}}, $fld);	  # store for later processing
     }
     elsif($i2 eq  '2') {	
+	return () if $self->drop_publisher();
 	#  The publisher 856 field may have $a for server, $u for url, or both.
 	$u = $fld->subfield('u');
 
@@ -363,6 +456,12 @@ sub do856 {
 
 	push(@subs, ['a', $a]) if(defined($a) && ($a ne ''));
 	push(@subs, ['u', $u]) if(defined($u) && ($u ne ''));
+	$u = $self->publtext856();
+	$a = $self->publcode856();
+	if(defined($u) && ($u ne '')) {
+	    $a = $infosub unless(defined($a) && ($a ne ''));
+	    push(@subs, [$a, $u]) 
+	}
 	$fld->ind2('2') ;  
 	$fld->subf(\@subs);
 	push(@{$links->{'2'}}, $fld);
@@ -472,23 +571,26 @@ sub do001 {
 
 sub do245 {
     my ($self, $fld, $rec, $param) = @_;
-    my $title = $fld->subfield('a');
+    my $t = $fld->subfield('a');
+    my $s;
 
     # The regexp below is the result of an empirical investigation of the data and should fit the need.
     $fld->ind1('0');
-    $fld->ind2($title =~ m/(Käsikirjasto-[A-Z]|L\'|Le |The |Die |Der |Das)/go ? length($1) : 0);
+    $fld->ind2($t =~ m/(Käsikirjasto-[A-Z]|L\'|Le |The |Die |Der |Das)/go ? length($1) : 0);
     $fld->tag('245') if exists $param->{'s'};	    # doing title swapping
+    $s = $self->add245b();
+    $fld->subf([['a', $t], ['b', $s]]) if($s ne '');
     return ($fld);
 }
 
 
 #   Split the value and generate one instance of the 653 field for each part.
 #   Expressions like "nursing medicine" and "veterinary medicine" in the field would generate 
-#   multiple instances of the keyword "medicine", so we'll filter out any and all duplicates.
+#   multiple instances of the keyword "medicine" when there are no comma or semicolon separators
+#   in the field, so we'll filter out any and all duplicates to be sure.
 #
 sub do653 {
     my ($self, $fld, $rec, $param) = @_;
-    my @fields = ();
 
     my $s = $fld->subfield('a'); 
     unless(defined($s)) {
@@ -496,13 +598,23 @@ sub do653 {
 	$self->ok(0);
 	return ();
     }
+
+    my @fields = ();
+    my @keywords = ();
     
-    $s =~ s/\[(fi|s[evw]|e[ns])\]/\n/go if $self->droplangcodes(); # drop language codes
+    $s =~ s/\[(fi|s[evw]|e[ns])\]/\n/go if $self->droplangcodes(); 
     $s =~ s/^\s+|\s+$//go;
-    my @keywords = split(/[;,\s]+/o, $s);
+    if($s =~ m/[;,]/o) {
+	@keywords = split(/[;,]+/o, $s);
+    }
+    else {
+	@keywords = split(/\s+/o, $s);
+    }
     my %stored = ();
 
     map {
+	$_ =~ s/^\s*(.*\S)\s*$/$1/o;
+	$_ =~ s/\s+/ /go;
 	if($_ !~ m/^\[[a-z]+\]$/o && $_ ne '' && not $stored{$_}++) {
 	    push(@fields, MARC::Moose::Field::Std->new(
 		     'tag'  => '653',
@@ -521,6 +633,16 @@ sub do653 {
 sub do594 {
     my ($self, $fld, $rec, $param) = @_;
     my $i1;
+    my %a = (
+	'Unrestricted online access' => {
+	    'fin' => 'Aineisto on vapaasti saatavissa',
+	    'swe' => 'Tillgång gratis.' # verify correctness!
+	},
+	'Online access with authorization' => {
+	    'fin' => 'Aineisto on saatavissa lisenssin hankkineissa kirjastoissa.',
+	    'swe' => 'Avgiftsbelagd databas, kontrakt och användarnamn obligatoriska.' # verify correctness!
+	}
+	);
     my $r = $fld->subfield('a');  # should check for anomalies...
 
     unless(defined($r)) {
@@ -528,11 +650,11 @@ sub do594 {
 	$self->ok(0);
 	return ();
     }
-    if($r =~ m/^FREE.*/go) {	# also here can be rubbish after a proper value
+    if($r =~ m/^FREE.*/go) {	# also here can be rubbish appended to the proper value
 	$i1 = 0;				 
-	$r = 'Unrestricted online access';	 
+	$r = 'Unrestricted online access';
     }
-    elsif($r =~ m/^SUBSCRIPTION.*/) {
+    elsif($r =~ m/^SUBSCRIPTION.*/o) {
 	$i1 = 1;
 	$r = 'Online access with authorization';
     }
@@ -550,7 +672,10 @@ sub do594 {
     my $rfield = MARC::Moose::Field::Std->new( {'tag' => '506', 
 						'ind1' => $i1,
 						'ind2' => ' ',
-						'subf' => [ ['f', $r], [ '2', 'star' ] ]
+						'subf' => [ ['a', $a{$r}{$self->language()}], 
+							    ['f', $r], 
+							    [ '2', 'star' ] 
+						    ]
 					       }
 					       );
     return ($rfield);
@@ -604,7 +729,7 @@ sub do546 {
     }
     elsif($s =~ m/$langpat/) {		# sometimes Metalib appends junk to field values
 	$s = $1;    
-	$self->info("cleaning up language name (to \"$s\") in field 546");
+	$self->info("cleaning up language name (set to \"$s\") in field 546");
     }
     else {	# unrecognised language
 	$self->ok(0);
@@ -657,6 +782,21 @@ sub doSTA {
     return ($fld);
 }
 
+#   This is a record level operation, not on par with the subs that go into the tag->sub mapping table.
+#   The reason for its being here is keeping status tag (988) and indicator definitions inside this module.
+#
+sub deactivate {
+    my ($self, $rec) = @_;
+    
+    foreach my $f (@{$rec->fields()}) {
+	if($f->tag() eq '988') {
+	    $f-> subf([[ 'a', 'INACTIVE' ]]);
+	    $f->ind1(0);
+	    last;
+	}
+    }
+}
+
 #   This field is something like an archeological sediment in the database.  It is not shown in the
 #   Metalib management interface (or anywhere else...) and so may have been inadvertently copied to
 #   inappropriate resources.  It would be a smart thing to simply drop the whole field, but here we go...
@@ -676,7 +816,7 @@ sub do561 {
     return ($fld);
 }
 
-sub _fillyear {    return sprintf '%04u', $_[0];    }
+#sub _fillyear {    return sprintf '%04u', $_[0];    }
 #   Still have to write proper versions of these:
 #   [Parse the time span data, create a 045 field if we can make sense of the data,
 #   or otherwise a 046 field. - forget the 045 for the moment, just do the 008.]
@@ -736,7 +876,7 @@ sub do513 {
     my $timecode = ($res->{'startera'} ne 'b' && $res->{'endera'} ne 'b') ? 
 	"c$res->{'start'}$res->{'end'}" : 'b       '; 
     $s = $self->inst008();
-    substr $s, 7, 8, "$res->{'start'}$res->{'end'}";
+    substr $s, 7, 8, $timecode; # was "$res->{'start'}$res->{'end'}";
     # publishing still continues/single publishing year/time span
     substr $s, 6, 1, ($res->{'end'} eq '9999' ? 'c' : ($res->{'end'} eq '    ' ? 's' : 'i'));
     $self->inst008($s);
@@ -818,7 +958,7 @@ sub do902 {
 sub noop {
     my ($self, $fld, $rec, $param) = @_;
 
-    if(exists $param->{'droplang'}) {
+    if(exists $param->{'droplang'}) { # this is not really used now
 	my $sflds = $fld->subf();
 	my $c = $fld->subfield($param->{'droplang'});
 	map {
@@ -831,27 +971,91 @@ sub noop {
     return ($fld);
 }
 
+#   Here we assume the hash marks have _not_ been removed from the field contents if we are doing
+#   splitting into language specific fields.  Otherwise they should be gone.
+#
 sub do520 {
     my ($self, $fld, $rec, $param) = @_;
-    my $sflds = $fld->subf();
+    my $s = $fld->subfield('a'); # no other subfields ever seen
 
+    $self->info('Field 520 mentions nelliportaali, please review record.') 
+	if($s =~ m/nelliportaali|omanelli/gio);
+    $s =~ s/\@\@U([^@]+)\@\@D([^@]*)\@\@E/\[$2\]\($1\)/go;  # substitute markdown for Metalib markup
+
+    $s =~ s/\[(fi|s[evw]|e[ns])\]/\n/go if exists $param->{'droplang'};
+
+    unless($self->langsplit_520() && $s =~ m/[\[{](ENG?|eng?|es|FIN?|fi|s[evw])\]/go) { # All codes are here.
+	$fld->subf($self->no520_9() ? [['a', $s]] : [['a', $s], ['9', $self->language()]]);
+	return($fld);
+    }
+
+    # split field into language-specific ones with subfield $9 added for lang code
+    my @rfields = ();
+    my $i = '';
+    my $n = '';
+    my $lc = '';
+    if($s =~ m/^(LAKKAUTUS[^aA]+alkaen.)[^#]*#+(.*)$/o) {
+	$i = 'Field 520 mentions canceled subscription, please review record.';
+	$n = $1;
+	$s = $2;
+    }
+    elsif($s =~ m/^(Koek.yt[^#]*)#+(.*)$/o) {
+	$i = 'Field 520 indicates test use of resource, please review record.';
+	$n = $1;
+	$s = $2;
+    }
+    else {
+	$s =~ s/^#+//go;
+    }
+    if($i ne '') {
+	$self->info($i);
+	push @rfields, MARC::Moose::Field::Std->new(tag => '500',
+						    ind1 => ' ',
+						    ind2 => ' ',
+						    subf => [['a', $n]]);
+    }
+
+    # Now we have [fi]?<blah>[sv]?<blah>[en]?<blah>
+    # Leading [fi] may be absent; also [sv] may be missing though the language changes; 
+    # and so may [en], and the order is not fixed.
+    #
+    #
+    my %lcodes = ('EN' => 'eng', 'ENG' => 'eng', 'en' => 'eng', 'eng' => 'eng', 
+		  'es' => 'est', 'FIN' => 'fin', 'FI' => 'fin', 'fi' => 'fin',
+		  'se' => 'swe', 'sw'  => 'swe', 'sv' => 'swe');
+
+    my @ltoks = split(/[\[{](ENG?|eng?|es|FIN?|fi|s[evw])\]/o, $s);
+    my %ltxt = ();
+    $lc = ($ltoks[0] ne '' ? 'fi' : (shift @ltoks, shift @ltoks)[1]);
+
+    while(1) {
+	$ltoks[0] =~ s/##/\n/go;
+	$ltxt{$lcodes{$lc}} = shift @ltoks; 
+	last unless defined ($lc = shift @ltoks);
+    }
+    # Sometimes the language changes from fin to swe with no code in between.
+    # 
+    if(!exists($ltxt{'swe'}) && $ltxt{'fin'} =~ m/([åÅ])/go) { 
+	$self->info('Field 520: no Swedish language code seen but \'$1\' found. Please review, just in case...');
+    }
     map {
-	if($_->[0] eq 'a') {
-	    $_->[1] =~ s/\[(fi|s[evw]|e[ns])\]/\n/go if(exists $param->{'droplang'});
-	    $_->[1] =~ s/\@\@U([^@]+)\@\@D([^@]+)\@\@E/\[$2\]\($1\)/go;  # substitute markdown for Metalib markup
-	    $self->info('Field 520 mentions nelliportaali, please review it.') if($_->[1] =~ m/nelliportaali/gio);
-	}
-    } @{$sflds};
-    $fld->subf($sflds);
+	push @rfields, MARC::Moose::Field::Std->new(tag => '520',
+						    ind1 => ' ',
+						    ind2 => ' ',
+						    subf => [
+							['a', $ltxt{$_}], 
+							['9', $self->language()]
+						    ]);
+    } sort keys %ltxt;
 
-    return ($fld);
+    return @rfields;
 }
 
 sub ftl {
     my ($self, $fld, $rec, $param) = @_;
 
     $self->has_ftl(1);
-    return ();
+    return ();  # or return the field unchanged, and write log and remove field in the later phase?
 }
 
 sub drop { 
