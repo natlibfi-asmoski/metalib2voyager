@@ -1,0 +1,26 @@
+#
+#    Configuration file template for ml2voy.pl
+#
+format			text
+output			foo.txt
+logname			MyLittleLog.log
+#
+#    Conversion options
+#
+noftlcheck		0
+drop			500,513
+extra_856_to_500	0	   
+swap210_245		0
+droplangcodes		0
+language		fin
+add245b			0
+drop_publisher		0
+no977			0
+infosub856		y
+publtext856		"Publisher website"
+publcode856		y
+localfields		989
+cat653			0
+no_op_653		0
+langsplit_520		0
+no520_9			0
