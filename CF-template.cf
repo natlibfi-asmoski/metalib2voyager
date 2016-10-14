@@ -1,26 +1,86 @@
 #
 #    Configuration file template for ml2voy.pl
 #
+#    Command line options override these settings.
+#
+#    General
+#
+#    Format can be text, marc, or xmlmarc
 format			text
+#
+#    Output file name
 output			foo.txt
+#
+#    Log file name
 logname			MyLittleLog.log
 #
 #    Conversion options
 #
+#    Booleans
+#
+#    Don't report records that have the same human UI link, and don't deactivate 
+#    restricted search records (that had the FTL field set in Metalib) that have
+#    an unrestricted twin record.
 noftlcheck		0
-drop			500,513
-extra_856_to_500	0	   
-swap210_245		0
-droplangcodes		0
-language		fin
-add245b			0
+#
+#    When a record has several different links defined for the UI and/and or 
+#    the guide, report extra links in a 500 field if this parameter is set.  
+#    Otherwise, all the 856 fields are preserved (and reported in the log) 
+#    and must be checked and removed by hand later.
+extra_856_to_500	0
+#
+#    If this parameter is set, leave out 856 fields with ind2=2 (Publisher link)
 drop_publisher		0
-no977			0
-infosub856		y
-publtext856		"Publisher website"
-publcode856		y
-localfields		989
-cat653			0
-no_op_653		0
-langsplit_520		0
+#
+#    Swap the two title fields with each other.
+swap210_245		0
+#
+#    The 520 fields sometimes have language codes that delimit parts of the
+#    content written in different languages.  Code format is like [fi].
+#    If this parameter is set, the language codes are substituted by newlines
+#    and the content is kept in a single field.
+droplangcodes		0
+#
+#    If this parameter is set, don't add language code subfield $9 to 520 fields.
+#    By default, cataloging language is filled in there (if langsplit_520 is not set).
 no520_9			0
+#
+#    Another approach to the language coding in 520 fields.  A coded field is split
+#    into language specific 520 instances, with language code in subfield $9.
+langsplit_520		0
+#
+#    Leave 653 fields as-is.  By default, they are split into single terms, each in its
+#    own 653 instance.
+no_op_653		0
+#
+#    Don't add field 977 $a "Database"
+no977			0
+#
+#   Strings
+#
+#   Comma-separated list of tags for fields to drop altogether.  No blanks in between!
+drop			500,513
+#
+#    Set tag and indicators for Metalib categories, instead of the default '976, , '
+#    Format of value is "<tag>,<ind1>,<ind2>"
+cat_tag			''
+#
+#   Cataloging language; fin and swe recognised at the moment
+language		fin
+#
+#   String to add to 245 $b, e.g. library name
+add245b			''
+#
+#   Subfield to use for link characterisation, e.g. "Database Guide" and "Database Interface"
+#   y, z, and 3 may be used, default value is y
+infosub856		y
+#
+#   Link characterisation text for 856 field when ind2=2 originally (Metalib: "Publisher")
+publtext856		"Publisher website"
+#
+#   Subfield to use for the text immediately above.  Possible values y, z, and 3.
+#   If left blank, the value of infosub856 will be used.
+publcode856		y
+#
+#   Tag to use for Metalib "Local Field 1-5" data
+localfields		989

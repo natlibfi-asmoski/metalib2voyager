@@ -30,7 +30,7 @@ has infosub856 =>	(is => 'rw', isa => 'Str', default => 'y'); # y or z
 has publtext856 =>	(is => 'rw', isa => 'Str', default => '');  #
 has publcode856 =>	(is => 'rw', isa => 'Str', default => 'y'); #
 has localfields =>	(is => 'rw', isa => 'Str', default => '989'); # 
-has cat653 =>		(is => 'rw', isa => 'Bool', default => 0);  # move categories (976) to 653 fields
+has cat_tag =>		(is => 'rw', isa => 'Str', default => '');  # tag and indicators for categories (976)
 has no_op_653 =>	(is => 'rw', isa => 'Bool', default => 0);  
 has langsplit_520 =>	(is => 'rw', isa => 'Bool', default => 0);  #
 has no520_9 =>		(is => 'rw', isa => 'Bool', default => 0);  #
@@ -41,14 +41,14 @@ has no520_9 =>		(is => 'rw', isa => 'Bool', default => 0);  #
 #  23:    resource type, 'o' means online
 #  26:    
 #  35-37: language ('mul' by default here)
-has def008       => (is => 'ro', isa => 'Str', default =>       '         xx|     o  j        mul  ');
+has def008       => (is => 'ro', isa => 'Str', default =>       'uuuuuuuuuxx|     o  j        mul  ');
 #							   0123456789012345678901234567890123456789
 #							             1         2         3      
 has inst008      => (is => 'rw', isa => 'Str', default => '');
 #
 #  In the leader, we may want to set pos 7 according to the actual resource
 #  Voyager bulk import requires 'a' in pos 9 to signify utf-8.
-has leader   =>  (is => 'rw', isa => 'Str', default => '00000nmc a       4i 4500');
+has leader   =>  (is => 'rw', isa => 'Str', default => '00000nmi a       4i 4500');
 #							012345678901234567890123
 # 							          1         2
 #  BTW, Finna xsl transformation set the leader to     '     nai a22     ua 4500'
@@ -124,8 +124,10 @@ sub BUILD {
 	$t->{'245'} = [ \&simple, { 't' => '210', 'i1' => '0', 'i2' => ' ' } ];
 	$t->{'210'} = [ \&do245,  { 's' => 1 }, ];
     }
-    if($self->cat653()) {
-	$t->{'976'} = [ \&simple, { 't' => '653', 'i1' => '0', 'i2' => ' ' } ];
+    $s = $self->cat_tag();
+    if($s ne '') {
+	my @cats = split(',', $s); # trusting blindly the format is correct...
+	$t->{'976'} = [ \&simple, { 't' => $cats[0], 'i1' => $cats[1], 'i2' => $cats[2] } ]; 
     }
     if($self->no_op_653()) {
 	$t->{'653'} = [ \&noop,   {}, ];
@@ -865,7 +867,7 @@ sub do513 {
 	    $i1 = '2';
 	    $sf = [
 		[ ($res->{'startera'} eq 'b' ? 'c' : 'd'), $res->{'start'} ],
-		[ ($res->{'endera'} eq 'b' ? 'c' : 'd'), $res->{'start'} ],
+		[ ($res->{'endera'} eq 'b' ? 'c' : 'd'), $res->{'end'} ],
 		];
 	}
 	$resfld = MARC::Moose::Field::Std->new('tag' => '045', 'ind1' => $i1, 'ind2' => ' ', 'subf' => $sf );
@@ -874,11 +876,14 @@ sub do513 {
     # also try and set position 06 correctly according to the years given
     $res->{'end'} = '    ' if $res->{'end'} eq '';
     my $timecode = ($res->{'startera'} ne 'b' && $res->{'endera'} ne 'b') ? 
-	"c$res->{'start'}$res->{'end'}" : 'b       '; 
+	"c$res->{'start'}$res->{'end'}" : 'b'.' ' x 8;		# B.C. needs 'b' and blanks for both years
     $s = $self->inst008();
-    substr $s, 7, 8, $timecode; # was "$res->{'start'}$res->{'end'}";
-    # publishing still continues/single publishing year/time span
-    substr $s, 6, 1, ($res->{'end'} eq '9999' ? 'c' : ($res->{'end'} eq '    ' ? 's' : 'i'));
+    substr $s, 6, 9, $timecode; # was "$res->{'start'}$res->{'end'}";
+    # Now, divine from the end year whether publishing still continues (code c),
+    # single publishing year was given (code s), or a closed time span was given (code d)
+    # the c and d codes are valid for a continuous publication as set in the leader.
+    # BTW, code d states that publication, not subscription, has ceased.  Yet another potential trap...
+    substr $s, 6, 1, ($res->{'end'} eq '9999' ? 'c' : ($res->{'end'} eq '    ' ? 's' : 'd'));
     $self->inst008($s);
     return ($resfld);
 }

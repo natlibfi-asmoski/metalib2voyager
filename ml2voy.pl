@@ -7,8 +7,8 @@ use MARC::Moose::Metalib::Reader;
 use MARC::Moose::Metalib::Converter::Metalib2Voyager;
 use MARC::Moose::Formater::Text;
 use MooseX::RW::Writer::File;
-use NelliISIL;
 use Config::Simple;
+use NelliISIL;
 
 binmode(STDOUT, ":encoding(UTF-8)");
 
@@ -26,14 +26,14 @@ my %conv_opt = (
     'swap210_245' => 0,			#
     'droplangcodes' => 0,		#
     'language' => 'fin',		#
-    'add245b' => 0,			#
+    'add245b' => '',			# 
     'drop_publisher' => 0,		#
     'no977' => 0,			#
     'infosub856' => 'y',		#
     'publtext856' => '',		#
     'publcode856' => 'y',		#
     'localfields' =>'989',		#
-    'cat653' => 0,			#
+    'cat_tag' => '',			#
     'no_op_653' => 0,			#
     'langsplit_520' => 0,		#
     'no520_9' => 0,			#
@@ -56,10 +56,10 @@ Usage: $0 [ options ] metalib-xml-file
 		-droplangcodes
 		-language fin|swe
 		-extra_856_to_500
-		-add245b
+		-add245b text
 		-infosub856 y|z|3
 		-noftlcheck
-		-cat653
+		-cat_tag <tag>,<ind1>,<ind2>
 		-langsplit_520
 		-localfields <tag>
 		-no977
@@ -93,13 +93,13 @@ usage() if (!GetOptions(
 		 'swap210_245',
 		 'droplangcodes',
 		 'extra_856_to_500',
-		 'add245b',
+		 'add245b=s',
 		 'language=s',
 		 'infosub856=s',
 		 'publtext856=s',
 		 'publcode856=s',
 		 'localfields=s',
-		 'cat653',
+		 'cat_tag=s',
 		 'langsplit_520',
 		 'no977',
 		 'drop_publisher',
@@ -116,7 +116,7 @@ my $output;
 my $cnv;
 
 if(exists($cl_opt{'cf'}) && $cl_opt{'cf'} ne '') {
-    die "Failed to read config file" unless defined $cfg = Config::Simple->new($cl_opt{'cf'});
+    die "Failed to read config file" unless defined($cfg = Config::Simple->new($cl_opt{'cf'}));
 }
 
 if(defined $cfg) {
@@ -147,7 +147,7 @@ unless($rawdump) {
     $reader->hash2lf($hashfields);
 }
 
-die "Formatter constructor failed" unless defined my $fmt = &{$formatters{$options{'format'}}};
+die "Formatter constructor failed" unless defined (my $fmt = &{$formatters{$options{'format'}}});
 
 if($options{'output'} ne '') {
     open($output, '>', $options{'output'}) or die "$0: cannot open output file \"$options{'output'}\": $!\n";
@@ -159,7 +159,7 @@ else {
 binmode($output, ":encoding(UTF-8)");
 
 die "Converter constructor failed" 
-    unless defined my $cnv = MARC::Moose::Metalib::Converter::Metalib2Voyager->new(%conv_opt);
+    unless defined ($cnv = MARC::Moose::Metalib::Converter::Metalib2Voyager->new(%conv_opt));
 
 my $log = $cnv->log();
 
