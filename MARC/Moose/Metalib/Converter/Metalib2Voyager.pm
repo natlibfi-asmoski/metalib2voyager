@@ -638,11 +638,11 @@ sub do594 {
     my %a = (
 	'Unrestricted online access' => {
 	    'fin' => 'Aineisto on vapaasti saatavissa',
-	    'swe' => 'Tillgång gratis.' # verify correctness!
+	    'swe' => 'Fritt tillgänglig på nätet.' 
 	},
 	'Online access with authorization' => {
 	    'fin' => 'Aineisto on saatavissa lisenssin hankkineissa kirjastoissa.',
-	    'swe' => 'Avgiftsbelagd databas, kontrakt och användarnamn obligatoriska.' # verify correctness!
+	    'swe' => 'Tillgänglig på nätet för auktoriserade användare.'
 	}
 	);
     my $r = $fld->subfield('a');  # should check for anomalies...
