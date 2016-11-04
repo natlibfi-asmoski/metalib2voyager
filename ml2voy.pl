@@ -24,7 +24,7 @@ my %conv_opt = (
     'logname' => 'Metalib2Voyager.log', #
     'extra_856_to_500' => 0,		#
     'swap210_245' => 0,			#
-    'droplangcodes' => 0,		#
+    'droplangcodes' => 1,		#
     'language' => 'fin',		#
     'add245b' => '',			# 
     'drop_publisher' => 0,		#
@@ -36,7 +36,10 @@ my %conv_opt = (
     'cat_tag' => '',			#
     'no_op_653' => 0,			#
     'langsplit_520' => 0,		#
-    'no520_9' => 0,			#
+#    'no520_9' => 0,			# don't want to touch it right now
+    'drop_546' => 0,			#
+    'drop_540' => 0,			#
+    'notime_008' => 0			#
     );
 
 
@@ -68,6 +71,9 @@ Usage: $0 [ options ] metalib-xml-file
 		-publcode856 y|z|3
 		-no_op_653
 		-no520_9
+		-drop_546
+		-drop_540
+		-notime_008
 
        Default format is text and default log file name 'Metalib2Voyager.log'.
 
@@ -129,23 +135,22 @@ map { $options{$_}  = $cl_opt{$_} if exists $cl_opt{$_}; } (keys %options);
 map { $conv_opt{$_} = $cl_opt{$_} if exists $cl_opt{$_}; } (keys %conv_opt);
 
 
-my $rawdump = 0;
 my $reader = MARC::Moose::Metalib::Reader->new( file => $ARGV[0] );
+die "Reader constructor failed" unless defined $reader;
+
 my $dropthese = join('|', qw(024 073 270 307 50[56] 53[12] 57[45] 59[1235] 650 720 956 AF3 AIP ATG CJK FIL ICN
  			     INT LUP MTD NEW NWD NWP PXY REG RNK SES S[FP]X TAR TRN UPD VER VRD ZAT ZDC ZHS));
+
+$dropthese .= '|' . join('|', split(/,/, $options{'drop'})) if $options{'drop'} ne '';
+
 
 # these fields may contain ## -markup to be cleaned up
 my $hashfields = ($conv_opt{'langsplit_520'} ? '500|545|LCL' : '500|520|545|LCL');	
 
-$dropthese .= '|' . join('|', split(/,/, $options{'drop'})) if $options{'drop'} ne '';
+$reader->only001(1);
+$reader->dropfields($dropthese);
+$reader->hash2lf($hashfields);
 
-die "Reader constructor failed" unless defined $reader;
-
-unless($rawdump) {
-    $reader->only001(1);
-    $reader->dropfields($dropthese);
-    $reader->hash2lf($hashfields);
-}
 
 die "Formatter constructor failed" unless defined (my $fmt = &{$formatters{$options{'format'}}});
 
