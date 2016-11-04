@@ -33,7 +33,10 @@ has localfields =>	(is => 'rw', isa => 'Str', default => '989'); #
 has cat_tag =>		(is => 'rw', isa => 'Str', default => '');  # tag and indicators for categories (976)
 has no_op_653 =>	(is => 'rw', isa => 'Bool', default => 0);  
 has langsplit_520 =>	(is => 'rw', isa => 'Bool', default => 0);  #
-has no520_9 =>		(is => 'rw', isa => 'Bool', default => 0);  #
+has no520_9 =>		(is => 'rw', isa => 'Bool', default => 1);  # let's not use this at all right now
+has drop_546 =>		(is => 'rw', isa => 'Bool', default => 0);  # drop language field after creating 041 etc.
+has drop_540 =>		(is => 'rw', isa => 'Bool', default => 0);  # drop resulting terms of use field.
+has notime_008 =>	(is => 'rw', isa => 'Bool', default => 0);  # don't set 008 time span (but for BC dates)
 #
 #  008 field:
 #  ----------
@@ -347,14 +350,6 @@ sub process856set {
     my $v = $self->urlvalidator();
     my %labels = ('1' => 'UI', '2' => 'publisher', '9' => 'database guide');
     
-    if(0) {  # BUGABOO!
-	print STDOUT "856 fields:\n";
-	foreach $i (sort keys %labels) {
-	    foreach $f (@{$fields->{$i}}) {
-		print STDOUT $f->as_formatted(), "\n";
-	    }
-	}
-    }
     $self->ui_url('');
     return (1, [@{$fields->{'2'}}, @{$fields->{'9'}}]) unless(scalar @{$fields->{'1'}});
 
@@ -496,7 +491,8 @@ sub do500 {
     map {
 	if($_->[0] eq 'a') {
 	    $_->[1] =~ s/\[(fi|s[evw]|e[ns])\]/\n/go if exists $param->{'droplang'};
-	    $self->info('Field 500 mentions nelliportaali, please review it.') if $_->[1] =~ m/nelliportaali/gio;
+	    $self->info('Field 500 mentions nelliportaali, please review it.') 
+		if $_->[1] =~ m/nelliportaali|omanelli/gio;
 	}
     } @{$sflds};
 
@@ -587,9 +583,9 @@ sub do245 {
 
 
 #   Split the value and generate one instance of the 653 field for each part.
-#   Expressions like "nursing medicine" and "veterinary medicine" in the field would generate 
-#   multiple instances of the keyword "medicine" when there are no comma or semicolon separators
-#   in the field, so we'll filter out any and all duplicates to be sure.
+#   Expressions like "nursing medicine" and "veterinary medicine" in the field could generate 
+#   multiple instances of the keyword "medicine" in some situations, so we'll filter out 
+#   any and all duplicates to be sure.
 #
 sub do653 {
     my ($self, $fld, $rec, $param) = @_;
@@ -604,7 +600,7 @@ sub do653 {
     my @fields = ();
     my @keywords = ();
     
-    $s =~ s/\[(fi|s[evw]|e[ns])\]/\n/go if $self->droplangcodes(); 
+#    $s =~ s/\[(fi|s[evw]|e[ns])\]/\n/go if $self->droplangcodes(); # not like this!
     $s =~ s/^\s+|\s+$//go;
     if($s =~ m/[;,]/o) {
 	@keywords = split(/[;,]+/o, $s);
@@ -615,6 +611,7 @@ sub do653 {
     my %stored = ();
 
     map {
+	$_ =~ s/\[[a-z]+\]//go;  # drop language and thesaurus coding if present
 	$_ =~ s/^\s*(.*\S)\s*$/$1/o;
 	$_ =~ s/\s+/ /go;
 	if($_ !~ m/^\[[a-z]+\]$/o && $_ ne '' && not $stored{$_}++) {
@@ -755,7 +752,7 @@ sub do546 {
     $s = substr $e, 35, 3, $c;
     $self->inst008($e);
 
-    return ($fld, $cfield);
+    return $self->drop_546() ? ($cfield) : ($fld, $cfield);
 }
 
 #   IRD status can be 'ACTIVE',	'INACTIVE', or 'TEST'.  Use field 988 to store it, with ind1
@@ -784,7 +781,7 @@ sub doSTA {
     return ($fld);
 }
 
-#   This is a record level operation, not on par with the subs that go into the tag->sub mapping table.
+#   This is a record level operation unlike the subs that go into the tag->sub mapping table.
 #   The reason for its being here is keeping status tag (988) and indicator definitions inside this module.
 #
 sub deactivate {
@@ -818,12 +815,9 @@ sub do561 {
     return ($fld);
 }
 
-#sub _fillyear {    return sprintf '%04u', $_[0];    }
-#   Still have to write proper versions of these:
-#   [Parse the time span data, create a 045 field if we can make sense of the data,
-#   or otherwise a 046 field. - forget the 045 for the moment, just do the 008.]
-#   We'll have to update the 008 field, too.
-#   Well, now we are building a 046 field after all.
+#   
+#   Parse the time span data, create a 045 field if we can make sense of the data.
+#   Update the 008 field, too.
 #
 sub do513 {
     my ($self, $fld, $rec, $param) = @_;
@@ -840,51 +834,33 @@ sub do513 {
     # So now we got a more or less valid result.
     #
     my $resfld;
-    my $s;
+    my $time008 = $self->inst008();
 
-    # If we got '9999' end, we'll use the 046 field; indicators will be ' '.
-    if($res->{'end'} eq '9999') {
-	$resfld = MARC::Moose::Field::Std->new('tag' => '046', 'ind1' => ' ', 'ind2' => ' ',
-					       'subf' => [ 
-						   ['a' , 'i'], 
-						   [ ($res->{'startera'} eq 'a' ? 'c' : 'b'), $res->{'start'} ],
-						   [ ($res->{'endera'} eq 'a' ? 'e' : 'd'), $res->{'end'} ],
-					       ]
-	    );
+    my $start = ($res->{'startera'} eq 'b' ? 'c' : 'd'). $res->{'start'};
+    my $end = ($res->{'end'} ne '' ? ($res->{'endera'} eq 'b' ? 'c' : 'd') . $res->{'end'} : '');
+    my $i1 = $res->{'end'} eq '' ? '0' : '2';
+
+    if($res->{'startera'} eq 'b') {
+	if($res->{'end'} eq '9999') {
+	    $self->error("Time span starts B.C. and still continues: not representable in MARC21");
+	    $fld->tag('500');
+	    return ($fld);
+	}
+	substr $time008, 6, 9, 'b' . ' ' x 8;
     }
     else {
-    #
-    # If 'end' is not '9999', we'll use the 045 field.  
-    # Then if it is a single year, end will be '', and we'll set ind1 to 0; otherwise ind2 will be 2.
-    #
-	#$res->{'startera'} eq 'b' || $res->{'endera'} eq 'b'
-	my ($sf, $i1);
-	if($res->{'end'} eq '') { 
-	    $i1 = '0';
-	    $sf = [ [ ($res->{'startera'} eq 'b' ? 'c' : 'd'), $res->{'start'} ]];
-	}
-	else {
-	    $i1 = '2';
-	    $sf = [
-		[ ($res->{'startera'} eq 'b' ? 'c' : 'd'), $res->{'start'} ],
-		[ ($res->{'endera'} eq 'b' ? 'c' : 'd'), $res->{'end'} ],
-		];
-	}
-	$resfld = MARC::Moose::Field::Std->new('tag' => '045', 'ind1' => $i1, 'ind2' => ' ', 'subf' => $sf );
+	my $code = $res->{'end'} eq '9999' ? 'c' : ($res->{'end'} eq '' ? 's' : 'd');
+	substr $time008, 6, 9,  $code . $res->{'start'} . ($res->{'end'} eq '' ? '    ' : $res->{'end'});
     }
-    # now let's encode the data for use in the 008 field
-    # also try and set position 06 correctly according to the years given
-    $res->{'end'} = '    ' if $res->{'end'} eq '';
-    my $timecode = ($res->{'startera'} ne 'b' && $res->{'endera'} ne 'b') ? 
-	"c$res->{'start'}$res->{'end'}" : 'b'.' ' x 8;		# B.C. needs 'b' and blanks for both years
-    $s = $self->inst008();
-    substr $s, 6, 9, $timecode; # was "$res->{'start'}$res->{'end'}";
-    # Now, divine from the end year whether publishing still continues (code c),
-    # single publishing year was given (code s), or a closed time span was given (code d)
-    # the c and d codes are valid for a continuous publication as set in the leader.
-    # BTW, code d states that publication, not subscription, has ceased.  Yet another potential trap...
-    substr $s, 6, 1, ($res->{'end'} eq '9999' ? 'c' : ($res->{'end'} eq '    ' ? 's' : 'd'));
-    $self->inst008($s);
+    $self->inst008($time008) unless $self->notime_008();
+
+    $resfld = MARC::Moose::Field::Std->new('tag' => '045', 
+					   'ind1' => $i1, 
+					   'ind2' => ' ', 
+					   'subf' => $end eq '' ? 
+					   [ ['b', $start] ] : 
+					   [ ['b', $start], [ 'b', $end] ]
+	);
     return ($resfld);
 }
 
@@ -896,6 +872,7 @@ sub do540 {
     $self->info('Field 540 mentions nelliportaali, please review it.') if $s =~ m/nelliportaali/gio;
 
     if(defined $self->urlvalidator->is_web_uri($s)) {
+	return () if $self->drop_540();
 	$fld->ind1(' ');
 	$fld->ind2(' ');
 	$fld->subf( [['u', $s ]] );
@@ -918,11 +895,13 @@ sub do590 {
 
     $self->info('Field 590 mentions nelliportaali, please review it.') if $s =~ m/nelliportaali/gio;
 
-    if($s =~m/https?:/go) {
-	if($s =~ m/(ehdot|conditions|oikeudet):\s*(http.*)/go) {
-	    if(defined $self->urlvalidator->is_web_uri($2)) { #
+    
+    unless($self->drop_540()) {
+	if($s =~ m/(ehdot|conditions|oikeudet):\s*(https?:.*)/go) {
+	    my $u = $2;
+	    if(defined $self->urlvalidator->is_web_uri($u)) { 
 		$newfld = MARC::Moose::Field::Std->new( {'tag' => '540', 'ind1' => ' ', 'ind2' => ' ',
-							 'subf' => [[ 'u' => $2 ]] } );
+							 'subf' => [[ 'u' => $u ]] } );
 	    }
 	}
     }
@@ -943,7 +922,7 @@ sub do902 {
 			       creativecommons legal access_use rattigheter license));
     my $s = $fld->subfield('a');
 
-    $self->info('Field 902 mentions nelliportaali, please review it.') if $s =~ m/nelliportaali/gio;
+    $self->info('Field 902 mentions nelliportaali, please review it.') if $s =~ m/nelliportaali|omanelli/gio;
 
     if(defined $self->urlvalidator->is_web_uri($s) && $s =~ m/$catcher/i) { 
 		$newfld = MARC::Moose::Field::Std->new( {'tag' => '540', 'ind1' => ' ', 'ind2' => ' ',
@@ -987,10 +966,15 @@ sub do520 {
 	if($s =~ m/nelliportaali|omanelli/gio);
     $s =~ s/\@\@U([^@]+)\@\@D([^@]*)\@\@E/\[$2\]\($1\)/go;  # substitute markdown for Metalib markup
 
-    $s =~ s/\[(fi|s[evw]|e[ns])\]/\n/go if exists $param->{'droplang'};
+    if(exists $param->{'droplang'}) {
+	$s =~ s/^\s*\[(fi|s[evw]|e[ns])\]//go;
+	$s =~ s/\[(fi|s[evw]|e[ns])\]/\n/go;
+    }
 
     unless($self->langsplit_520() && $s =~ m/[\[{](ENG?|eng?|es|FIN?|fi|s[evw])\]/go) { # All codes are here.
-	$fld->subf($self->no520_9() ? [['a', $s]] : [['a', $s], ['9', $self->language()]]);
+	# FIXME! cataloging language or resource language?
+	$s =~ s/##/\n/go if $self->langsplit_520();   # hashes were left intact in this case
+	$fld->subf($self->no520_9() ? [['a', $s]] : [['a', $s], ['9', $self->language()]]); 
 	return($fld);
     }
 
@@ -1034,8 +1018,10 @@ sub do520 {
     $lc = ($ltoks[0] ne '' ? 'fi' : (shift @ltoks, shift @ltoks)[1]);
 
     while(1) {
-	$ltoks[0] =~ s/##/\n/go;
-	$ltxt{$lcodes{$lc}} = shift @ltoks; 
+	$s = shift @ltoks; 
+	$s =~ s/##/\n/go;
+	$s =~ s/\s*$//go;
+	$ltxt{$lcodes{$lc}} = $s;
 	last unless defined ($lc = shift @ltoks);
     }
     # Sometimes the language changes from fin to swe with no code in between.
@@ -1049,7 +1035,7 @@ sub do520 {
 						    ind2 => ' ',
 						    subf => [
 							['a', $ltxt{$_}], 
-							['9', $self->language()]
+							['9', $_]
 						    ]);
     } sort keys %ltxt;
 
