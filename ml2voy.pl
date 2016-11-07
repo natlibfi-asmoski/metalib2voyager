@@ -16,7 +16,7 @@ my %options = (
     'noftlcheck' => 0,
     'format' => 'text',
     'output' => '',
-    'drop' => '',
+    'droptags' => '',
     'cf' => ''
     );
 
@@ -52,7 +52,7 @@ Usage: $0 [ options ] metalib-xml-file
        Options
 		-format text|marc|xmlmarc
 		-output filename
-		-drop <tag>(,<tag>)*
+		-droptags <tag>(,<tag>)*
 		-cf configfilename
 		-logname filename
 		-swap210_245
@@ -91,7 +91,7 @@ usage() if (!GetOptions(
 		 \%cl_opt,
 		 'format=s',
 		 'output=s',
-		 'drop=s',
+		 'droptags=s',
 		 'cf=s',
 		 'noftlcheck',
 
@@ -141,7 +141,7 @@ die "Reader constructor failed" unless defined $reader;
 my $dropthese = join('|', qw(024 073 270 307 50[56] 53[12] 57[45] 59[1235] 650 720 956 AF3 AIP ATG CJK FIL ICN
  			     INT LUP MTD NEW NWD NWP PXY REG RNK SES S[FP]X TAR TRN UPD VER VRD ZAT ZDC ZHS));
 
-$dropthese .= '|' . join('|', split(/,/, $options{'drop'})) if $options{'drop'} ne '';
+$dropthese .= '|' . join('|', split(/,/, $options{'droptags'})) if $options{'droptags'} ne '';
 
 
 # these fields may contain ## -markup to be cleaned up
