@@ -857,7 +857,7 @@ sub do513 {
     $resfld = MARC::Moose::Field::Std->new('tag' => '045', 
 					   'ind1' => $i1, 
 					   'ind2' => ' ', 
-					   'subf' => $end eq '' ? 
+					   'subf' => $res->{'end'} eq '' || $res->{'end'} eq '9999' ? 
 					   [ ['b', $start] ] : 
 					   [ ['b', $start], [ 'b', $end] ]
 	);
@@ -967,7 +967,7 @@ sub do520 {
     $s =~ s/\@\@U([^@]+)\@\@D([^@]*)\@\@E/\[$2\]\($1\)/go;  # substitute markdown for Metalib markup
 
     if(exists $param->{'droplang'}) {
-	$s =~ s/^\s*\[(fi|s[evw]|e[ns])\]//go;
+	$s =~ s/^\s*\[(fi|s[evw]|e[ns])\]\s*//go;
 	$s =~ s/\[(fi|s[evw]|e[ns])\]/\n/go;
     }
 
