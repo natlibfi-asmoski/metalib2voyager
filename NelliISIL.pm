@@ -84,7 +84,8 @@ sub _build_ISILtable {
     'TEAK' =>		[qw(FI-Tx FI-Sib FI-SibK FI-Teat)],    # Agreed with Erkki Huttunen on Sep 8, 2016
 #    'TKK' =>		[qw(FI-P FI-P-ETA FI-P-IL FI-P-KM FI-P-TFM FI-Aalto)],
     'TKK' =>		[qw(FI-Aalto)],		# agreed with Mari Aaltonen on Sep 23, 2016
-    'TTY' =>		[qw(FI-Tt FI-Ttk)],
+#   'TTY' =>		[qw(FI-Tt FI-Ttk)],
+    'TTY' =>		[qw(FI-Tt)],		# agreed with Ismo Raitanen on Nov 11, 2016
 #    'TUAMK' =>		[qw(FI-Tua FI-Tual FI-Tuas FI-Tuau FI-Tule FI-tuli FI-Turu FI-Tuse)],
     'TUAMK' =>		[qw(FI-Tua)],  		# agreed with Liisa Tiittanen on Sep 14, 2016
     'TUKKK' =>		[qw(FI-F)],
