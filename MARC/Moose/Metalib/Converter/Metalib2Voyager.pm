@@ -661,7 +661,7 @@ sub do594 {
 	$i1 = 0;				 # has not been chosen either way in Metalib; 
 	$r = 'Unrestricted online access';	 # empirically these cases have been free resources
 	$self->info("undefined access policy resulted in an URL in field 594,\n" .
-		    "\t\tnow set field 506 to 'Unrestricted onine access', please verify")
+		    "\t\tnow set field 506 to 'Unrestricted online access', please verify")
     }
     else {
 	$self->error("unrecognised access policy value in field 594: \"$r\"");
