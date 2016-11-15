@@ -39,7 +39,8 @@ my %conv_opt = (
 #    'no520_9' => 0,			# don't want to touch it right now
     'drop_546' => 0,			#
     'drop_540' => 0,			#
-    'notime_008' => 0			#
+    'notime_008' => 0,			#
+    'hulibext' => 0			#
     );
 
 
@@ -74,6 +75,7 @@ Usage: $0 [ options ] metalib-xml-file
 		-drop_546
 		-drop_540
 		-notime_008
+		-hulibext <tag>
 
        Default format is text and default log file name 'Metalib2Voyager.log'.
 
@@ -110,6 +112,7 @@ usage() if (!GetOptions(
 		 'no977',
 		 'drop_publisher',
 		 'no_op_653',
+		 'hulibext=s',
    ) 
    || ($#ARGV == -1) 
    || ($#ARGV > 1) 

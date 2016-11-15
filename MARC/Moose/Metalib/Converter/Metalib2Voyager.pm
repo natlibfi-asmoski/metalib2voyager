@@ -15,6 +15,7 @@ with 'MARC::Moose::Metalib::Converter', 'MARC::Moose::Metalib::Converter::TimeSp
 
 has urlvalidator => 	(is => 'rw', isa => 'Data::Validate::URI', builder => '_build_urlvalidator');
 has organisation =>	(is => 'rw', isa => 'Str', default => '');
+has isil5 =>		(is => 'rw', isa => 'ArrayRef', default => sub {[]});
 has val007 =>		(is => 'rw', isa => 'Str', default => 'cr||||||||||||');
 has has_ftl =>		(is => 'rw', isa => 'Bool', default => 0);
 has ui_url =>		(is => 'rw', isa => 'Str', default => '');
@@ -25,7 +26,7 @@ has droplangcodes =>	(is => 'rw', isa => 'Bool', default => 1);  #
 has language =>		(is => 'rw', isa => 'Str', default => 'fin');#
 has add245b => 		(is => 'rw', isa => 'Str', default => '');  #
 has drop_publisher =>	(is => 'rw', isa => 'Bool', default => 0);  #
-has no977 =>		(is => 'rw', isa => 'Bool', default => 0);  # must change default to TRUE later
+has no977 =>		(is => 'rw', isa => 'Bool', default => 0);  # removes all ways of representing resource type
 has infosub856 =>	(is => 'rw', isa => 'Str', default => 'y'); # y or z
 has publtext856 =>	(is => 'rw', isa => 'Str', default => '');  #
 has publcode856 =>	(is => 'rw', isa => 'Str', default => 'y'); #
@@ -37,6 +38,7 @@ has no520_9 =>		(is => 'rw', isa => 'Bool', default => 1);  # let's not use this
 has drop_546 =>		(is => 'rw', isa => 'Bool', default => 0);  # drop language field after creating 041 etc.
 has drop_540 =>		(is => 'rw', isa => 'Bool', default => 0);  # drop resulting terms of use field.
 has notime_008 =>	(is => 'rw', isa => 'Bool', default => 0);  # don't set 008 time span (but for BC dates)
+has hulibext =>		(is => 'rw', isa => 'Str', default => '');  # tag for hulib suggested 900-series substitute
 #
 #  008 field:
 #  ----------
@@ -132,6 +134,11 @@ sub BUILD {
 	my @cats = split(',', $s); # trusting blindly the format is correct...
 	$t->{'976'} = [ \&simple, { 't' => $cats[0], 'i1' => $cats[1], 'i2' => $cats[2] } ]; 
     }
+    $s = $self->hulibext();
+    if($s ne '') {
+	$t->{'976'} = [ \&docat, {'tag' => $s, 'lang' => $self->language()} ]; 
+	$t->{'LCL'} = [ \&dolcl, {'tag' => $s, 'lang' => $self->language()} ]; 
+    }
     if($self->no_op_653()) {
 	$t->{'653'} = [ \&noop,   {}, ];
     }
@@ -147,7 +154,7 @@ sub BUILD {
     }
     $s = $self->extras();
 
-    unless($self->droplangcodes()) {
+    unless($self->droplangcodes() && !$self->langsplit_520()) {
 	delete $t->{'520'}[1]{'droplang'};
 	delete $t->{'500'}[1]{'droplang'};
     }
@@ -159,14 +166,13 @@ sub _build_additions {
     my $lang = shift;
 
     my @fields;
-    my $f;
     my %asrc = ( 
 	'fin' => [ 
 	    {
 		'tag' => '300', 
 		'ind1' => ' ', 
 		'ind2' => ' ',
-		'subf' => [['a', "1 verkkoaineisto"]],  # varmista!
+		'subf' => [['a', "1 verkkoaineisto"]],
 	    },
 	    {
 		'tag' => '336', 
@@ -192,7 +198,7 @@ sub _build_additions {
 		'tag' => '300', 
 		'ind1' => ' ', 
 		'ind2' => ' ',
-		'subf' => [['a', "1 onlineresurs"]],  # varmista!
+		'subf' => [['a', "1 onlineresurs"]],
 	    },
 	    {
 		'tag' => '336', 
@@ -233,12 +239,13 @@ sub _build_additions {
 	}
 	);
 
-    die "unknown cataloging language \"$lang\" - aborting..." unless exists $asrc{$lang}; # can be sen on cmd line...
+    die "unknown cataloging language \"$lang\" - aborting..." unless exists $asrc{$lang}; # can be set on cmd line...
 
     map { push(@fields, MARC::Moose::Field::Std->new($_)); } @{$asrc{$lang}};
 
     map { 
-	push(@fields, MARC::Moose::Field::Std->new($_)) unless $self->no977() && ($_->{'tag'} eq '977');
+	push(@fields, MARC::Moose::Field::Std->new($_)) 
+	    unless ($self->no977() || $self->hulibext()) && ($_->{'tag'} eq '977');
     } @{$asrc{'alllang'}};
 
     map { push(@fields, MARC::Moose::Field::Control->new($_)); } @{$asrc{'ctrl'}};
@@ -271,6 +278,13 @@ sub initialise {
     $s = $s->subfield('a');
     $self->organisation($s);
 
+    if($self->hulibext() ne '') {
+	my @is5 = ();
+	my $ilist = $self->isil_table()->getIsilIds($s);
+
+	map { push @is5, ['5', $_]; } @{$ilist};
+	$self->isil5(\@is5);
+    }
     # Need to grab the necessary data to create field 008 in finish() after 
     # the original fields have been processed. 
     # Now we only look in the CAT fields to set the record creation date, but
@@ -314,19 +328,43 @@ sub finish {
     ($s, $links) = $self->process856set();
 
     if($s) {
-	($e) = grep { $_->{'tag'} eq '988' } @{$flist};
-	# just in case orig STA was broken
-	unless(defined($e)) {
-	    $e = MARC::Moose::Field::Std->new('tag' => '988');
-	    push(@{$flist},  $e);
+	$self->deactivate();
+	$self->info("Resource has no " . ($s eq '2' ? 'valid ': '') . 
+		    "link for human UI, setting it to inactive state.");
+    }
+    if(($s = $self->hulibext()) ne '' && !$self->no977()) {
+	my %rtag = ('fin' => 'aineistotyyppi', 'swe' => 'resurstyp');
+	my %db =  ('fin' => 'tietokanta', 'swe' => 'databas');
+	my $lang = $self->language();
+
+	if($s eq '886') {
+	    $e = MARC::Moose::Field::Std->new(
+	    'tag' => '886', 
+	    'ind1' => '2',
+	    'ind2' => ' ',
+	    'subf' => [ 
+		['2', 'local'],
+		['a', $rtag{$lang}],
+		['b', '00'],
+		['c', $db{$lang}],
+		@{$self->isil5()}
+	    ]
+	    );
 	}
-	if((not defined($tmp = $e->subfield('a'))) || $tmp eq 'ACTIVE') {
-	    $e->subf( [ [ 'a', 'INACTIVE' ] ] );
-	    $e->ind1(0);
-	    $e->ind2(' ');
-	    $self->info("Resource has no " . ($s eq '2' ? 'valid ': '') . 
-			"link for human UI, setting it to inactive state.");
+	else {
+	    $e = MARC::Moose::Field::Std->new(
+		'tag' => $s,
+		'ind1' => ' ',
+		'ind2' => ' ',
+		'subf' => [ 
+		    ['a', $rtag{$lang}],
+		    ['b', $db{$lang}],
+		    ['9', 'finna-db' ],
+		    @{$self->isil5()}
+		]
+		);
 	}
+	push @{$flist}, $e;
     }
     return sort { $a->{'tag'} cmp $b->{'tag'} } (@{$flist}, @{$links});
 }
@@ -762,21 +800,47 @@ sub doSTA {
     my %states = ('INACTIVE' => 0, 'ACTIVE' => 1, 'TEST' => 2);
 
     my $s = $fld->subfield('a');
+    my $t;
 
     if(!defined($s)) {
 	$self->ok(0);
 	$self->error("field STA: missing subfield a");
 	return ();
-
     }
-    elsif(exists $states{ $s } ) {
-	$fld->ind1($states{ $s });
-	$fld->tag('988');
-    }
-    else {
+    elsif(!exists $states{ $s } ) {
 	$self->ok(0);
 	$self->error("unrecognised record status in a STA field: \"$s\"");
 	return ();
+    }
+    $t = $self->hulibext();
+    if($t eq '') {
+	$fld->ind1($states{ $s });
+	$fld->tag('988');
+    }
+    elsif($t eq '886') {
+	$fld = MARC::Moose::Field::Std->new(
+	    'tag' => '886', 
+	    'ind1' => '2',
+	    'ind2' => ' ',
+	    'subf' => [ [ '2', 'local' ],
+			[ 'a', 'status' ],
+			[ 'b', '00' ],
+			[ 'c',  $s ],
+			@{$self->isil5()}
+	    ] 
+	    );
+    }
+    else { # 59X
+	$fld = MARC::Moose::Field::Std->new(
+	    'tag' => $t, 
+	    'ind1' => ' ',
+	    'ind2' => ' ',
+	    'subf' => [ [ 'a', 'status' ],
+			[ 'b',  $s ],
+			[ '9', 'finna-db' ],
+			@{$self->isil5()}
+	    ] 
+	    );
     }
     return ($fld);
 }
@@ -786,12 +850,37 @@ sub doSTA {
 #
 sub deactivate {
     my ($self, $rec) = @_;
-    
-    foreach my $f (@{$rec->fields()}) {
-	if($f->tag() eq '988') {
-	    $f-> subf([[ 'a', 'INACTIVE' ]]);
-	    $f->ind1(0);
-	    last;
+    my $t = $self->hulibext();
+
+    $rec = $self->rec() unless defined $rec;
+
+    if($t eq  '') {    
+	foreach my $f (@{$rec->fields()}) {
+	    if($f->tag() eq '988') {
+		$f-> subf([[ 'a', 'INACTIVE' ]]);
+		$f->ind1(0);
+		last;
+	    }
+	}
+    }
+    else {
+	foreach my $f (@{$rec->fields()}) {
+	    if($f->tag() eq $t) {
+		$f->subf($t eq '886' ? 
+			 [ [ '2', 'local' ],
+			   [ 'a', 'status' ],
+			   [ 'b', '00' ],
+			   [ 'c',  'INACTIVE' ],
+			   @{$self->isil5()}
+			 ] :
+			 [ [ 'a', 'status' ],
+			   [ 'b',  'INACTIVE' ],
+			   [ '9', 'finna-db' ],
+			   @{$self->isil5()}
+			 ]
+		    );
+		last;
+	    }
 	}
     }
 }
@@ -955,6 +1044,20 @@ sub noop {
     return ($fld);
 }
 
+sub langfield {
+    my ($linkno, $xtag, $langstr, $l) = @_;
+   return ($xtag eq '886' ? 
+	   { 
+	       'tag' => $xtag, 'ind1' => '2', 'ind2' => ' ', 
+	       'subf' => [['2', 'local'], ['a', $langstr], ['b', '00'], ['8', "$linkno\\p"], ['l', $l]] 
+	   } :
+	   { 
+	       'tag' => $xtag, 'ind1' => ' ', 'ind2' => ' ', 
+	       'subf' => [['8', "$linkno\\p"], ['a', $langstr], ['l', $l], ['9', 'finna-db']]
+	   }
+       );
+}
+
 #   Here we assume the hash marks have _not_ been removed from the field contents if we are doing
 #   splitting into language specific fields.  Otherwise they should be gone.
 #
@@ -1015,7 +1118,7 @@ sub do520 {
 
     my @ltoks = split(/[\[{](ENG?|eng?|es|FIN?|fi|s[evw])\]/o, $s);
     my %ltxt = ();
-    $lc = ($ltoks[0] ne '' ? 'fi' : (shift @ltoks, shift @ltoks)[1]);
+    $lc = ($ltoks[0] eq '' ? (shift @ltoks, shift @ltoks)[1] : 'fi');
 
     while(1) {
 	$s = shift @ltoks; 
@@ -1026,17 +1129,25 @@ sub do520 {
     }
     # Sometimes the language changes from fin to swe with no code in between.
     # 
-    if(!exists($ltxt{'swe'}) && $ltxt{'fin'} =~ m/([åÅ])/go) { 
+
+    if(!exists($ltxt{'swe'}) && (exists $ltxt{'fin'} && $ltxt{'fin'} =~ m/([åÅ])/go)) { 
 	$self->info('Field 520: no Swedish language code seen but \'$1\' found. Please review, just in case...');
     }
+    $s = $self->hulibext();
+    my $lmeta = ($self->language() eq 'fin' ? 'kieli' : 'språk');
+
+    die("language splitting of 520 field requested without setting HULib extension tag") if $s eq '';
+    $n = 1;
+
     map {
 	push @rfields, MARC::Moose::Field::Std->new(tag => '520',
 						    ind1 => ' ',
 						    ind2 => ' ',
 						    subf => [
+							['8', "$n\\p"],
 							['a', $ltxt{$_}], 
-							['9', $_]
 						    ]);
+	push @rfields, MARC::Moose::Field::Std->new(langfield($n++, $s, $lmeta, $_));
     } sort keys %ltxt;
 
     return @rfields;
@@ -1046,7 +1157,80 @@ sub ftl {
     my ($self, $fld, $rec, $param) = @_;
 
     $self->has_ftl(1);
+    $self->info("Removing search restriction parameter \"" . $fld->subfield('a') . "\"");
     return ();  # or return the field unchanged, and write log and remove field in the later phase?
+}
+
+
+sub docat {
+    my ($self, $fld, $rec, $param) = @_;
+    my %cat = ('swe' => 'kategori', 'fin' => 'kategoria');
+    my $f;
+
+    if($param->{'tag'} eq '886') {
+	$f = MARC::Moose::Field::Std->new(
+	    'tag' => '886', 
+	    'ind1' => '2',
+	    'ind2' => ' ',
+	    'subf' => [ 
+		['2', 'local'],
+		['a', $cat{$param->{'lang'}}],
+		['b', '00'],
+		['c', $fld->subfield('a')],
+		['d', $fld->subfield('b')],	    
+		@{$self->isil5()}
+	    ]
+	    );
+    }
+    else {
+	$f = MARC::Moose::Field::Std->new(
+	    'tag' => $param->{'tag'},
+	    'ind1' => ' ',
+	    'ind2' => ' ',
+	    'subf' => [ 
+		['a', $cat{$param->{'lang'}}],
+		['b', $fld->subfield('a')],
+		['c', $fld->subfield('b')],	    
+		['9', 'finna-db' ],
+		@{$self->isil5()}
+	    ]
+	    );
+    }
+    return ($f);
+}
+
+sub dolcl {
+    my ($self, $fld, $rec, $param) = @_;
+    my $f;
+
+    if($param->{'tag'} eq '886') {
+	$f = MARC::Moose::Field::Std->new(
+	    'tag' => '886', 
+	    'ind1' => '2',
+	    'ind2' => ' ',
+	    'subf' => [ 
+		['2', 'local'],
+		['a', 'lcl'],
+		['b', '00'],
+		['c', $fld->subfield('a')],
+		@{$self->isil5()}
+	    ]
+	    );
+    }
+    else {
+	$f = MARC::Moose::Field::Std->new(
+	    'tag' => $param->{'tag'},
+	    'ind1' => ' ',
+	    'ind2' => ' ',
+	    'subf' => [ 
+		['a', 'lcl'],
+		['b', $fld->subfield('a')],
+		['9', 'finna-db' ],
+		@{$self->isil5()}
+	    ]
+	    );
+    }
+    return ($f);
 }
 
 sub drop { 

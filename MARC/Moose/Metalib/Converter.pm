@@ -12,8 +12,8 @@ has ok       => (is => 'rw', isa => 'Bool');
 has logname  => (is => 'rw', isa => 'Str', default => '&STDERR');
 has log      => (is => 'rw', isa => 'MARC::Moose::Metalib::Converter::Logfile');
 has loglevel => (is => 'rw', isa => 'Int', default => 3);
-has recordid     => (is => 'rw', isa => 'Str', default => '');
-
+has recordid => (is => 'rw', isa => 'Str', default => '');
+has rec =>      (is => 'rw', isa => 'MARC::Moose::Record');
 # You should initialize the log in the consumer BUILD, e.g.
 #
 # sub BUILD {
@@ -35,6 +35,7 @@ sub convert {
     my $err = '';
     my $errSeen = 0;
     
+    $self->rec($rec);
     # run conversion from table
     $i = 0;
 
