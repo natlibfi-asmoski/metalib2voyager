@@ -14,31 +14,37 @@ use Data::Validate::URI;
 with 'MARC::Moose::Metalib::Converter', 'MARC::Moose::Metalib::Converter::TimeSpanParser';
 
 has urlvalidator => 	(is => 'rw', isa => 'Data::Validate::URI', builder => '_build_urlvalidator');
-has organisation =>	(is => 'rw', isa => 'Str', default => '');
+has organisation =>	(is => 'rw', isa => 'Str',  default => '');
 has isil5 =>		(is => 'rw', isa => 'ArrayRef', default => sub {[]});
-has val007 =>		(is => 'rw', isa => 'Str', default => 'cr||||||||||||');
+has val007 =>		(is => 'rw', isa => 'Str',  default => 'cr||||||||||||');
 has has_ftl =>		(is => 'rw', isa => 'Bool', default => 0);
-has ui_url =>		(is => 'rw', isa => 'Str', default => '');
+has inactive =>		(is => 'rw', isa => 'Bool', default => 0);
+has ui_url =>		(is => 'rw', isa => 'Str',  default => '');
+has dbui =>		(is => 'rw', isa => 'Str',  default => 'Database Interface');
+has dbguide =>		(is => 'rw', isa => 'Str',  default => 'Database Guide');
 # conversion options:
 has extra_856_to_500 => (is => 'rw', isa => 'Bool', default => 0);  #
 has swap210_245  =>	(is => 'rw', isa => 'Bool', default => 0);  #
 has droplangcodes =>	(is => 'rw', isa => 'Bool', default => 1);  #
-has language =>		(is => 'rw', isa => 'Str', default => 'fin');#
-has add245b => 		(is => 'rw', isa => 'Str', default => '');  #
+has language =>		(is => 'rw', isa => 'Str',  default => 'fin');#
+has add245b => 		(is => 'rw', isa => 'Str',  default => '');  #
 has drop_publisher =>	(is => 'rw', isa => 'Bool', default => 0);  #
-has no977 =>		(is => 'rw', isa => 'Bool', default => 0);  # removes all ways of representing resource type
-has infosub856 =>	(is => 'rw', isa => 'Str', default => 'y'); # y or z
-has publtext856 =>	(is => 'rw', isa => 'Str', default => '');  #
-has publcode856 =>	(is => 'rw', isa => 'Str', default => 'y'); #
-has localfields =>	(is => 'rw', isa => 'Str', default => '989'); # 
-has cat_tag =>		(is => 'rw', isa => 'Str', default => '');  # tag and indicators for categories (976)
+has no_restype =>	(is => 'rw', isa => 'Bool', default => 0);  # removes all ways of representing resource type
+has infosub856 =>	(is => 'rw', isa => 'Str',  default => 'y'); # y or z
+has publtext856 =>	(is => 'rw', isa => 'Str',  default => '');  #
+has publcode856 =>	(is => 'rw', isa => 'Str',  default => 'y'); #
+has localfields =>	(is => 'rw', isa => 'Str',  default => '989'); # 
+has cat_tag =>		(is => 'rw', isa => 'Str',  default => '');  # tag and indicators for categories (976)
 has no_op_653 =>	(is => 'rw', isa => 'Bool', default => 0);  
 has langsplit_520 =>	(is => 'rw', isa => 'Bool', default => 0);  #
 has no520_9 =>		(is => 'rw', isa => 'Bool', default => 1);  # let's not use this at all right now
 has drop_546 =>		(is => 'rw', isa => 'Bool', default => 0);  # drop language field after creating 041 etc.
 has drop_540 =>		(is => 'rw', isa => 'Bool', default => 0);  # drop resulting terms of use field.
 has notime_008 =>	(is => 'rw', isa => 'Bool', default => 0);  # don't set 008 time span (but for BC dates)
-has hulibext =>		(is => 'rw', isa => 'Str', default => '');  # tag for hulib suggested 900-series substitute
+has hulibext =>		(is => 'rw', isa => 'Str',  default => ''); # tag for hulib-suggested 900-series substitute
+has catlang856 =>	(is => 'rw', isa => 'Bool', default => 0);  # use cataloging language for 856 $[yz3]
+has dropstatus =>	(is => 'rw', isa => 'Bool', default => 0);  # remove status field from output records
+has dot245 =>		(is => 'rw', isa => 'Bool', default => 0);  # append full stop to 245 $a if none found
 #
 #  008 field:
 #  ----------
@@ -46,7 +52,7 @@ has hulibext =>		(is => 'rw', isa => 'Str', default => '');  # tag for hulib sug
 #  23:    resource type, 'o' means online
 #  26:    
 #  35-37: language ('mul' by default here)
-has def008       => (is => 'ro', isa => 'Str', default =>       'uuuuuuuuuxx|     o  j        mul  ');
+has def008       => (is => 'ro', isa => 'Str', default =>       'uuuuuuuuuxx      o  j        mul  ');
 #							   0123456789012345678901234567890123456789
 #							             1         2         3      
 has inst008      => (is => 'rw', isa => 'Str', default => '');
@@ -107,7 +113,7 @@ sub _build_optable {
 	'AF1' => [ \&af1,    {}, ],
 	'CAT' => [ \&drop,   {}, ],  # could drop these already in initialise()
 	'CKB' => [ \&drop,   {}, ],  # for the time being; have to figure out FTL handling first
-	'FTL' => [ \&ftl,   {}, ],  # 
+	'FTL' => [ \&ftl,    {}, ],  # 
 	'LCL' => [ \&simple, { 't' => '989',	      'i2' => ' ' } ],
 	'STA' => [ \&doSTA,  {}, ],  # 988; will be used as filtering value in Voyager harvesting
     };
@@ -157,6 +163,16 @@ sub BUILD {
     unless($self->droplangcodes() && !$self->langsplit_520()) {
 	delete $t->{'520'}[1]{'droplang'};
 	delete $t->{'500'}[1]{'droplang'};
+    }
+    if($self->catlang856()) {
+	if($self->language() eq 'fin') {
+	    $self->dbui(decode('UTF-8', 'Tietokannan käyttöliittymä'));
+	    $self->dbguide('Tietokannan ohje');
+	}
+	else { # swe
+	    $self->dbui(decode('UTF-8', 'Databasgränssnitt'));
+	    $self->dbguide('Databasanvisning');
+	}
     }
     $self->additions($self->_build_additions($self->language()));
 }
@@ -230,7 +246,7 @@ sub _build_additions {
 	'ctrl' => [
 	    {
 		'tag' => '006',
-		'value' => 's|||w|o|||||||||'
+		'value' => 's|||w|o|||||||||||'
 	    }
 	],
 	'extras' => {
@@ -245,7 +261,7 @@ sub _build_additions {
 
     map { 
 	push(@fields, MARC::Moose::Field::Std->new($_)) 
-	    unless ($self->no977() || $self->hulibext()) && ($_->{'tag'} eq '977');
+	    unless ($self->no_restype() || $self->hulibext()) && ($_->{'tag'} eq '977');
     } @{$asrc{'alllang'}};
 
     map { push(@fields, MARC::Moose::Field::Control->new($_)); } @{$asrc{'ctrl'}};
@@ -270,6 +286,7 @@ sub initialise {
     $s = $s->value();		# (but the reader now skips them)
     $self->recordid($s);
     $self->has_ftl(0);
+    $self->inactive(0);
 
     $self->seen856( { '1' => {}, '2' => {}, '9' => {} } );
     $self->f856( { '1' => [], '2' => [], '9' => [] } );
@@ -332,7 +349,7 @@ sub finish {
 	$self->info("Resource has no " . ($s eq '2' ? 'valid ': '') . 
 		    "link for human UI, setting it to inactive state.");
     }
-    if(($s = $self->hulibext()) ne '' && !$self->no977()) {
+    if(($s = $self->hulibext()) ne '' && !$self->no_restype()) {
 	my %rtag = ('fin' => 'aineistotyyppi', 'swe' => 'resurstyp');
 	my %db =  ('fin' => 'tietokanta', 'swe' => 'databas');
 	my $lang = $self->language();
@@ -468,7 +485,7 @@ sub do856 {
 	    return ($fld);	# this instance is broken, we'll keep it as is for later investigation
 	}
 	return () if $seen->{$i2}{$u}++;  # drop duplicates
-	@subs = ( ['u', $u], [$infosub, $i2 eq '1' ? "Database Interface" : "Database Guide"]);
+	@subs = ( ['u', $u], [$infosub, $i2 eq '1' ? $self->dbui() : $self->dbguide()]);
 	$fld->ind2($i2 eq '1' ? 0 : 2) ;  # i2=9 will be set to 2
 	$fld->subf(\@subs);
 	push(@{$links->{$i2}}, $fld);	  # store for later processing
@@ -613,9 +630,12 @@ sub do245 {
     # The regexp below is the result of an empirical investigation of the data and should fit the need.
     $fld->ind1('0');
     $fld->ind2($t =~ m/(Käsikirjasto-[A-Z]|L\'|Le |The |Die |Der |Das)/go ? length($1) : 0);
+
+    $t .= '.' if($self->dot245() && ($t !~ m/[?!\.]$/o)) ;
+
     $fld->tag('245') if exists $param->{'s'};	    # doing title swapping
     $s = $self->add245b();
-    $fld->subf([['a', $t], ['b', $s]]) if($s ne '');
+    $fld->subf($s ne '' ? [['a', $t], ['b', $s]] : [['a', $t]]);
     return ($fld);
 }
 
@@ -805,14 +825,20 @@ sub doSTA {
     if(!defined($s)) {
 	$self->ok(0);
 	$self->error("field STA: missing subfield a");
+	$self->inactive(1);
 	return ();
     }
     elsif(!exists $states{ $s } ) {
 	$self->ok(0);
 	$self->error("unrecognised record status in a STA field: \"$s\"");
+	$self->inactive(1);
 	return ();
     }
+
     $t = $self->hulibext();
+    $self->inactive($states{$s} != 1);
+    return () if $self->dropstatus();
+
     if($t eq '') {
 	$fld->ind1($states{ $s });
 	$fld->tag('988');
@@ -847,13 +873,14 @@ sub doSTA {
 
 #   This is a record level operation unlike the subs that go into the tag->sub mapping table.
 #   The reason for its being here is keeping status tag (988) and indicator definitions inside this module.
+#   It is now also used from within this module because of the hulibext hulabaloo.
 #
 sub deactivate {
     my ($self, $rec) = @_;
     my $t = $self->hulibext();
 
     $rec = $self->rec() unless defined $rec;
-
+    $self->inactive(1); # needed when this function is used from inside this module
     if($t eq  '') {    
 	foreach my $f (@{$rec->fields()}) {
 	    if($f->tag() eq '988') {
@@ -1071,12 +1098,12 @@ sub do520 {
 
     if(exists $param->{'droplang'}) {
 	$s =~ s/^\s*\[(fi|s[evw]|e[ns])\]\s*//go;
-	$s =~ s/\[(fi|s[evw]|e[ns])\]/\n/go;
+	$s =~ s/\s*\[(fi|s[evw]|e[ns])\]\s*/\n/go;
     }
 
     unless($self->langsplit_520() && $s =~ m/[\[{](ENG?|eng?|es|FIN?|fi|s[evw])\]/go) { # All codes are here.
 	# FIXME! cataloging language or resource language?
-	$s =~ s/##/\n/go if $self->langsplit_520();   # hashes were left intact in this case
+	$s =~ s/\s*##\s*/\n/go if $self->langsplit_520();   # hashes were left intact in this case
 	$fld->subf($self->no520_9() ? [['a', $s]] : [['a', $s], ['9', $self->language()]]); 
 	return($fld);
     }
@@ -1116,13 +1143,13 @@ sub do520 {
 		  'es' => 'est', 'FIN' => 'fin', 'FI' => 'fin', 'fi' => 'fin',
 		  'se' => 'swe', 'sw'  => 'swe', 'sv' => 'swe');
 
-    my @ltoks = split(/[\[{](ENG?|eng?|es|FIN?|fi|s[evw])\]/o, $s);
+    my @ltoks = split(/\s*[\[{](ENG?|eng?|es|FIN?|fi|s[evw])\]\s*/o, $s);
     my %ltxt = ();
     $lc = ($ltoks[0] eq '' ? (shift @ltoks, shift @ltoks)[1] : 'fi');
 
     while(1) {
 	$s = shift @ltoks; 
-	$s =~ s/##/\n/go;
+	$s =~ s/\s*##\s*/\n/go;
 	$s =~ s/\s*$//go;
 	$ltxt{$lcodes{$lc}} = $s;
 	last unless defined ($lc = shift @ltoks);

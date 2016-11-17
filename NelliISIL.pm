@@ -58,8 +58,9 @@ sub _build_ISILtable {
        			    FI-Metso FI-Metti FI-Mettu FI-Metvi)],
     'OAMK' =>		[qw(FI-Oakau FI-Oamok FI-Oaout FI-Oasot FI-Oatek)],
     'OY' =>		[qw(FI-Oakau FI-Ol)],
-    'PHKK' =>		[qw(FI-Lamk FI-Lakk(?) FI-Phfa FI-Phft FI-Phhe FI-Phmi FI-Phnt FI-Phot
-			    FI-Phpa FI-Phpyk FI-Phso FI-Phst)],
+#    'PHKK' =>		[qw(FI-Lamk FI-Lakk(?) FI-Phfa FI-Phft FI-Phhe FI-Phmi FI-Phnt FI-Phot
+#			    FI-Phpa FI-Phpyk FI-Phso FI-Phst)],
+    'PHKK' =>		[qw(FI-Lamk)], 		# agreed with Pertti Föhr on Nov 16, 2016
     'PKAMK' =>		[qw(FI-Kareli)],
     'RAMK' =>		[qw(FI-Rkaup FI-Rm FI-Rteku FI-Rteso)],
 #    'SAMK' =>		[qw(FI-Samk0 FI-Samk1 FI-Samk2 FI-Samk4 FI-Samk5 FI-Samk6 FI-Samk8 FI-Samk9 FI-Ttp)],

@@ -17,7 +17,8 @@ my %options = (
     'format' => 'text',
     'output' => '',
     'droptags' => '',
-    'cf' => ''
+    'cf' => '',
+    'fixer_uppers' => '',
     );
 
 my %conv_opt = (
@@ -28,7 +29,7 @@ my %conv_opt = (
     'language' => 'fin',		#
     'add245b' => '',			# 
     'drop_publisher' => 0,		#
-    'no977' => 0,			#
+    'no_restype' => 0,			#
     'infosub856' => 'y',		#
     'publtext856' => '',		#
     'publcode856' => 'y',		#
@@ -40,7 +41,10 @@ my %conv_opt = (
     'drop_546' => 0,			#
     'drop_540' => 0,			#
     'notime_008' => 0,			#
-    'hulibext' => 0			#
+    'catlang856' => 0,			#
+    'hulibext' => '',			#
+    'dropstatus' => 0,
+    'dot245' => 0,
     );
 
 
@@ -66,7 +70,7 @@ Usage: $0 [ options ] metalib-xml-file
 		-cat_tag <tag>,<ind1>,<ind2>
 		-langsplit_520
 		-localfields <tag>
-		-no977
+		-no_restype
 		-drop_publisher
 		-publtext856 <text>
 		-publcode856 y|z|3
@@ -75,7 +79,11 @@ Usage: $0 [ options ] metalib-xml-file
 		-drop_546
 		-drop_540
 		-notime_008
+		-catlang856
 		-hulibext <tag>
+		-fixer_uppers filename
+		-dropstatus
+		-dot245
 
        Default format is text and default log file name 'Metalib2Voyager.log'.
 
@@ -109,10 +117,14 @@ usage() if (!GetOptions(
 		 'localfields=s',
 		 'cat_tag=s',
 		 'langsplit_520',
-		 'no977',
+		 'no_restype',
 		 'drop_publisher',
 		 'no_op_653',
+		 'catlang856',
 		 'hulibext=s',
+		 'fixer_uppers=s',
+		 'dropstatus',
+		 'dot245',
    ) 
    || ($#ARGV == -1) 
    || ($#ARGV > 1) 
@@ -122,6 +134,7 @@ usage() if (!GetOptions(
 
 my $cfg;
 my $output;
+my $fixus;
 my $cnv;
 
 if(exists($cl_opt{'cf'}) && $cl_opt{'cf'} ne '') {
@@ -163,8 +176,14 @@ if($options{'output'} ne '') {
 else {
     open($output, ">&STDOUT");
 }
-
 binmode($output, ":encoding(UTF-8)");
+
+if($options{'fixer_uppers'} ne '') {
+    open($fixus, '>', $options{'fixer_uppers'}) or die "$0: cannot open output file \"$options{'fixer_uppers'}\": $!\n";
+    binmode($fixus, ":encoding(UTF-8)");
+}
+
+
 
 die "Converter constructor failed" 
     unless defined ($cnv = MARC::Moose::Metalib::Converter::Metalib2Voyager->new(%conv_opt));
@@ -177,12 +196,14 @@ my $errors  = 0;
 my @recs = ();
 #my @ftlrecs = ();
 my %recs_by_url = ();
+my %inactive = ();	# keep note of deactivated records here in case we want them in a separate file
 
 $log->write("Conversion done on " . localtime() . ", input file \"$ARGV[0]\".\n");
 
 while($rec = $reader->read()) {
     $r = $cnv->convert($rec);
     $errors++ unless $cnv->ok();
+    $inactive{$r} = 1 if $cnv->inactive();
     push @recs, $r;
     $s = $cnv->ui_url();
     $recs_by_url{$s} = [[],[]] unless exists $recs_by_url{$s};	
@@ -210,6 +231,7 @@ unless($options{'noftlcheck'}) {
 	    $s = $_->field('035')->subfield('a');
 	    $log->write("Info  (\"$s\"): Deactivating limited search record" . $r . ".\n");
 	    $cnv->deactivate($_);
+	    $inactive{$_} = 1;
 	} @{$recs_by_url{$_}[1]}
     } keys %recs_by_url;
 }
@@ -217,8 +239,19 @@ unless($options{'noftlcheck'}) {
 my $prefix = ($options{'format'} eq 'text' ? '-' x 60 . "\n" : '');
 
 print $output $fmt->begin();
-map { print $output  $prefix . $fmt->format($_); } @recs;
+print $fixus $fmt->begin() if $options{'fixer_uppers'} ne '';
+
+if($options{'fixer_uppers'} ne '') {
+    map { 
+	if($inactive{$_}) { print $fixus  $prefix . $fmt->format($_); }
+	else { print  $output $prefix . $fmt->format($_); }
+    }@recs;
+}
+else {
+    map { print $output  $prefix . $fmt->format($_); } @recs;
+}
 print $output $fmt->end();
+print $fixus $fmt->end() if $options{'fixer_uppers'} ne '';
 
 $log->write("\nFile \"$ARGV[0]\", $records record" . ($records == 1 ? '' : 's') . 
 	    ", $errors conversion problem" .

@@ -59,7 +59,7 @@ no977			0
 #   Strings
 #
 #   Comma-separated list of tags for fields to drop altogether.  No blanks in between!
-drop			500,513
+droptags		500,513
 #
 #    Set tag and indicators for Metalib categories, instead of the default '976, , '
 #    Format of value is "<tag>,<ind1>,<ind2>"
@@ -84,3 +84,32 @@ publcode856		y
 #
 #   Tag to use for Metalib "Local Field 1-5" data
 localfields		989
+#
+#   Don't add resource type field to record
+no_restype    	        0
+#
+#   Drop resource language field 546 but keep 041 and language code in 008
+drop_546		0
+#
+#   Drop copyright note links from output if found in 540/590 fields but keep copyright owner names 
+#   if found in input 540 fields
+drop_540		0
+#
+#   Don't set publishing time in 008 field contents after input 513 field contents
+notime_008    		0
+#
+#   Use texts in cataloging language (set by parameter "language") for 856 $[yz3] fields
+catlang856		0
+#
+#   Use HULib scheme to avoid 900 series fields in resulting records.  Value can be 886 or 59[0-9]
+#hulibext		886
+#
+#   Leave out status field from output records
+dropstatus		0
+#
+#   Append full stop to field 245 $a if none exists at its end
+dot245			0
+#
+#   Separate file for records in inactive state after conversion
+#fixer_uppers		''
+

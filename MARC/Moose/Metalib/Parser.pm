@@ -125,7 +125,7 @@ override 'parse' => sub {
 		foreach $sp (@{$d->{$SUBFNAME}}) {
 		    $s = $sp->{$CONTNAME};
 		    if(($lffields ne '') && ($tag =~ m/$lffields/g)) {
-			$s =~ s/##/\n/g;
+			$s =~ s/\s*##\s*/\n/g;
 		    }
                     push @subf, [$sp->{$CODENAME},  $s];
                 }
@@ -133,7 +133,7 @@ override 'parse' => sub {
             else {
 		$s = $d->{$SUBFNAME}{$CONTNAME};
 		if(($lffields ne '') && ($tag =~ m/$lffields/g)) {
-		    $s =~ s/##/\n/g;
+		    $s =~ s/\s*##\s*/\n/g;
 		}
 		push @subf, [$d->{$SUBFNAME}{$CODENAME}, $s];
             }
