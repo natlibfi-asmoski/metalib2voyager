@@ -22,6 +22,7 @@ has inactive =>		(is => 'rw', isa => 'Bool', default => 0);
 has ui_url =>		(is => 'rw', isa => 'Str',  default => '');
 has dbui =>		(is => 'rw', isa => 'Str',  default => 'Database Interface');
 has dbguide =>		(is => 'rw', isa => 'Str',  default => 'Database Guide');
+has txt506a =>		(is => 'rw', isa => 'HashRef', builder => '_build_txt506a');
 # conversion options:
 has extra_856_to_500 => (is => 'rw', isa => 'Bool', default => 0);  #
 has swap210_245  =>	(is => 'rw', isa => 'Bool', default => 0);  #
@@ -45,6 +46,7 @@ has hulibext =>		(is => 'rw', isa => 'Str',  default => ''); # tag for hulib-sug
 has catlang856 =>	(is => 'rw', isa => 'Bool', default => 0);  # use cataloging language for 856 $[yz3]
 has dropstatus =>	(is => 'rw', isa => 'Bool', default => 0);  # remove status field from output records
 has dot245 =>		(is => 'rw', isa => 'Bool', default => 0);  # append full stop to 245 $a if none found
+has restr506a =>	(is => 'rw', isa => 'Str',  default => ''); # 506 $a text for restricted resources
 #
 #  008 field:
 #  ----------
@@ -86,6 +88,20 @@ has table => (is => 'ro', isa => 'HashRef[ArrayRef]', builder => '_build_optable
 sub _build_urlvalidator {
     return Data::Validate::URI->new();
 } 
+
+sub _build_txt506a {
+    return
+    {
+	'Unrestricted online access' => {
+	    'fin' => 'Aineisto on vapaasti saatavissa',
+	    'swe' => decode('UTF-8','Fritt tillgänglig på nätet.'), 
+	},
+	'Online access with authorization' => {
+	    'fin' => 'Aineisto on saatavissa lisenssin hankkineissa kirjastoissa.',
+	    'swe' => decode('UTF-8','Tillgänglig på nätet för auktoriserade användare.'),
+	}
+    }
+}
 
 sub _build_optable {
     return { 
@@ -158,7 +174,9 @@ sub BUILD {
     elsif($s ne '989') {
 	$self->error("Unexpected tag requested for ex-Metalib local fields: \"$s\".  Using 989 for them.");
     }
-    $s = $self->extras();
+
+    $s = $self->restr506a();
+    $self->txt506a()->{'Online access with authorization'}{$self->language()} = decode('UTF-8', $s) if $s ne '';
 
     unless($self->droplangcodes() && !$self->langsplit_520()) {
 	delete $t->{'520'}[1]{'droplang'};
@@ -176,6 +194,7 @@ sub BUILD {
     }
     $self->additions($self->_build_additions($self->language()));
 }
+
 
 sub _build_additions {
     my $self = shift;
@@ -345,7 +364,7 @@ sub finish {
     ($s, $links) = $self->process856set();
 
     if($s) {
-	$self->deactivate();
+	$self->deactivate($flist);
 	$self->info("Resource has no " . ($s eq '2' ? 'valid ': '') . 
 		    "link for human UI, setting it to inactive state.");
     }
@@ -690,16 +709,6 @@ sub do653 {
 sub do594 {
     my ($self, $fld, $rec, $param) = @_;
     my $i1;
-    my %a = (
-	'Unrestricted online access' => {
-	    'fin' => 'Aineisto on vapaasti saatavissa',
-	    'swe' => decode('UTF-8','Fritt tillgänglig på nätet.'), 
-	},
-	'Online access with authorization' => {
-	    'fin' => 'Aineisto on saatavissa lisenssin hankkineissa kirjastoissa.',
-	    'swe' => decode('UTF-8','Tillgänglig på nätet för auktoriserade användare.'),
-	}
-	);
     my $r = $fld->subfield('a');  # should check for anomalies...
 
     unless(defined($r)) {
@@ -729,7 +738,7 @@ sub do594 {
     my $rfield = MARC::Moose::Field::Std->new( {'tag' => '506', 
 						'ind1' => $i1,
 						'ind2' => ' ',
-						'subf' => [ ['a', $a{$r}{$self->language()}], 
+						'subf' => [ ['a', $self->txt506a()->{$r}{$self->language()}], 
 							    ['f', $r], 
 							    [ '2', 'star' ] 
 						    ]
@@ -877,12 +886,16 @@ sub doSTA {
 #
 sub deactivate {
     my ($self, $rec) = @_;
-    my $t = $self->hulibext();
 
-    $rec = $self->rec() unless defined $rec;
     $self->inactive(1); # needed when this function is used from inside this module
+    return if $self->dropstatus(); # nothing to update in the record itself
+
+    my $flist = (ref $rec eq 'MARC::Moose::Record') ? $rec->fields() : $rec;
+
+    my $f;
+    my $t = $self->hulibext();
     if($t eq  '') {    
-	foreach my $f (@{$rec->fields()}) {
+	foreach $f (@{$flist}) {
 	    if($f->tag() eq '988') {
 		$f-> subf([[ 'a', 'INACTIVE' ]]);
 		$f->ind1(0);
@@ -891,7 +904,7 @@ sub deactivate {
 	}
     }
     else {
-	foreach my $f (@{$rec->fields()}) {
+	foreach $f (@{$flist}) {
 	    if($f->tag() eq $t) {
 		$f->subf($t eq '886' ? 
 			 [ [ '2', 'local' ],

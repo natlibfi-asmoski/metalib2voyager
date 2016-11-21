@@ -18,7 +18,7 @@ my %options = (
     'output' => '',
     'droptags' => '',
     'cf' => '',
-    'fixer_uppers' => '',
+    'fixer_uppers' => 0,
     );
 
 my %conv_opt = (
@@ -45,6 +45,7 @@ my %conv_opt = (
     'hulibext' => '',			#
     'dropstatus' => 0,
     'dot245' => 0,
+    'restr506a' => '',
     );
 
 
@@ -81,9 +82,10 @@ Usage: $0 [ options ] metalib-xml-file
 		-notime_008
 		-catlang856
 		-hulibext <tag>
-		-fixer_uppers filename
+		-fixer_uppers
 		-dropstatus
 		-dot245
+		-restr506a
 
        Default format is text and default log file name 'Metalib2Voyager.log'.
 
@@ -122,9 +124,10 @@ usage() if (!GetOptions(
 		 'no_op_653',
 		 'catlang856',
 		 'hulibext=s',
-		 'fixer_uppers=s',
+		 'fixer_uppers',
 		 'dropstatus',
 		 'dot245',
+		 'restr506a=s',
    ) 
    || ($#ARGV == -1) 
    || ($#ARGV > 1) 
@@ -167,6 +170,7 @@ $reader->only001(1);
 $reader->dropfields($dropthese);
 $reader->hash2lf($hashfields);
 
+my $s;
 
 die "Formatter constructor failed" unless defined (my $fmt = &{$formatters{$options{'format'}}});
 
@@ -178,8 +182,20 @@ else {
 }
 binmode($output, ":encoding(UTF-8)");
 
-if($options{'fixer_uppers'} ne '') {
-    open($fixus, '>', $options{'fixer_uppers'}) or die "$0: cannot open output file \"$options{'fixer_uppers'}\": $!\n";
+if($options{'fixer_uppers'}) {
+    $s = $options{'output'};
+    if($s =~ m!/!go) {
+	my @path = split('/', $s);
+	my $f = pop @path;
+	$f = "Fixme-$f";
+	push @path, $f;
+	$s = join('/', @path);
+    }
+    else {
+	$s = "Fixme-$s";
+    }
+    open($fixus, '>', $s) or 
+	die "$0: cannot open output file \"$s\" for problematic records: $!\n";
     binmode($fixus, ":encoding(UTF-8)");
 }
 
@@ -190,7 +206,7 @@ die "Converter constructor failed"
 
 my $log = $cnv->log();
 
-my ($rec, $r, $s);
+my ($rec, $r);
 my $records = 0;
 my $errors  = 0;
 my @recs = ();
