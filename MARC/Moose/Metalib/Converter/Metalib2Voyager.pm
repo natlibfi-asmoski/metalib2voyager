@@ -352,7 +352,7 @@ sub finish {
 	$s = substr $e, 35, 3, 'mul';
 	$self->inst008($e);
     }
-    # The tenth-of-a-second here is fictive.  Sori siitä.
+    # The tenth-of-a-second here is pure fiction.  Sori siitä.
     $s = sprintf("%04d%02d%02d%02d%02d%02d.0", $year + 1900, $mon + 1, $mday, $hour, $min, $sec);
     unshift(@{$flist}, 
 	    (MARC::Moose::Field::Control->new( {'tag' => '007', 'value' => $self->val007()} ),
@@ -992,6 +992,16 @@ sub do513 {
 	);
     return ($resfld);
 }
+sub finELibLic {
+    my ($self, $s) = @_;
+
+    if($s =~ m/nelliportaali\.fi\/aineistoehdot\/.+/o) {
+	return([['c', $self->language() eq 'fin' ? "FinELib-lisenssi" : "FinELib-licens"], ['u', $s]]);
+    }
+    else {
+	return([['u', $s]]);
+    }
+}
 
 sub do540 {
     my ($self, $fld, $rec, $param) = @_;
@@ -1004,7 +1014,7 @@ sub do540 {
 	return () if $self->drop_540();
 	$fld->ind1(' ');
 	$fld->ind2(' ');
-	$fld->subf( [['u', $s ]] );
+	$fld->subf($self->finELibLic($s));
     }
     else {	# got an ordinary language name, perhaps
 	$fld->tag('542');
@@ -1045,7 +1055,7 @@ sub do590 {
 
 sub do902 {
     my ($self, $fld, $rec, $param) = @_;
-    my $newfld = '';
+
     #  The following strings are found in valid access right description _links_
     my $catcher = join('|', qw(aineistoehdot oikeudet permissions terms copyright conditions rules 
 			       creativecommons legal access_use rattigheter license));
@@ -1054,15 +1064,16 @@ sub do902 {
     $self->info('Field 902 mentions nelliportaali, please review it.') if $s =~ m/nelliportaali|omanelli/gio;
 
     if(defined $self->urlvalidator->is_web_uri($s) && $s =~ m/$catcher/i) { 
-		$newfld = MARC::Moose::Field::Std->new( {'tag' => '540', 'ind1' => ' ', 'ind2' => ' ',
-							 'subf' => [[ 'u' => $s ]] } );
+		$fld = MARC::Moose::Field::Std->new( {'tag' => '540', 'ind1' => ' ', 'ind2' => ' ',
+						      'subf' => $self->finELibLic($s) } );
     }
-    $fld->tag('500');
-    $fld->ind1(' ');
-    $fld->ind2(' ');
-    $fld->subf( [[ 'a' , $s ]] );
+    else {
+	$fld->tag('500');
+	$fld->ind1(' ');
+	$fld->ind2(' ');
+	$fld->subf( [[ 'a' , $s ]] );
+    }
     
-    return ($fld, $newfld) if $newfld ne '';
     return ($fld);
 }
 

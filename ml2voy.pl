@@ -255,9 +255,9 @@ unless($options{'noftlcheck'}) {
 my $prefix = ($options{'format'} eq 'text' ? '-' x 60 . "\n" : '');
 
 print $output $fmt->begin();
-print $fixus $fmt->begin() if $options{'fixer_uppers'} ne '';
+print $fixus $fmt->begin() if $options{'fixer_uppers'};
 
-if($options{'fixer_uppers'} ne '') {
+if($options{'fixer_uppers'}) {
     map { 
 	if($inactive{$_}) { print $fixus  $prefix . $fmt->format($_); }
 	else { print  $output $prefix . $fmt->format($_); }
@@ -267,7 +267,7 @@ else {
     map { print $output  $prefix . $fmt->format($_); } @recs;
 }
 print $output $fmt->end();
-print $fixus $fmt->end() if $options{'fixer_uppers'} ne '';
+print $fixus $fmt->end() if $options{'fixer_uppers'};
 
 $log->write("\nFile \"$ARGV[0]\", $records record" . ($records == 1 ? '' : 's') . 
 	    ", $errors conversion problem" .
