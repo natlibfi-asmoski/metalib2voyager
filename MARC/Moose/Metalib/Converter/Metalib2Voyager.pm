@@ -188,8 +188,8 @@ sub BUILD {
 	    $self->dbguide('Tietokannan ohje');
 	}
 	else { # swe
-	    $self->dbui(decode('UTF-8', 'Databasgränssnitt'));
-	    $self->dbguide('Databasanvisning');
+	    $self->dbui(decode('UTF-8', 'Databasens användargränssnitt'));
+	    $self->dbguide('Databasens bruksanvisning');
 	}
     }
     $self->additions($self->_build_additions($self->language()));
@@ -648,7 +648,7 @@ sub do245 {
 
     # The regexp below is the result of an empirical investigation of the data and should fit the need.
     $fld->ind1('0');
-    $fld->ind2($t =~ m/(Käsikirjasto-[A-Z]|L\'|Le |The |Die |Der |Das)/go ? length($1) : 0);
+    $fld->ind2($t =~ m/(K.sikirjasto-[A-Z]|L\'|Le |The |Die |Der |Das)/go ? length($1) : 0);
 
     $t .= '.' if($self->dot245() && ($t !~ m/[?!\.]$/o)) ;
 
@@ -827,6 +827,8 @@ sub do546 {
 sub doSTA {
     my ($self, $fld, $rec, $param) = @_;
     my %states = ('INACTIVE' => 0, 'ACTIVE' => 1, 'TEST' => 2);
+    my %statestrings = ('fin' => {'INACTIVE' => 'sammutettu', 'ACTIVE' => 'aktiivinen', 'TEST' => 'testi'},
+			'swe' => {'INACTIVE' => 'inaktiv', 'ACTIVE' => 'aktiv', 'TEST' => 'test'});
 
     my $s = $fld->subfield('a');
     my $t;
@@ -853,6 +855,7 @@ sub doSTA {
 	$fld->tag('988');
     }
     elsif($t eq '886') {
+	$s = $statestrings{$self->language()}{$s};
 	$fld = MARC::Moose::Field::Std->new(
 	    'tag' => '886', 
 	    'ind1' => '2',
@@ -866,6 +869,7 @@ sub doSTA {
 	    );
     }
     else { # 59X
+	$s = $statestrings{$self->language()}{$s};
 	$fld = MARC::Moose::Field::Std->new(
 	    'tag' => $t, 
 	    'ind1' => ' ',
@@ -1185,7 +1189,7 @@ sub do520 {
 	$self->info('Field 520: no Swedish language code seen but \'$1\' found. Please review, just in case...');
     }
     $s = $self->hulibext();
-    my $lmeta = ($self->language() eq 'fin' ? 'kieli' : 'språk');
+    my $lmeta = ($self->language() eq 'fin' ? 'kieli' : decode('UTF-8','språk'));
 
     die("language splitting of 520 field requested without setting HULib extension tag") if $s eq '';
     $n = 1;
@@ -1253,6 +1257,7 @@ sub docat {
 sub dolcl {
     my ($self, $fld, $rec, $param) = @_;
     my $f;
+    my $i1 = $fld->ind1();
 
     if($param->{'tag'} eq '886') {
 	$f = MARC::Moose::Field::Std->new(
@@ -1261,21 +1266,23 @@ sub dolcl {
 	    'ind2' => ' ',
 	    'subf' => [ 
 		['2', 'local'],
-		['a', 'lcl'],
+		['a', $self->language() eq 'fin' ? decode('UTF-8','lisätieto') : 'extra information'],
 		['b', '00'],
-		['c', $fld->subfield('a')],
+		['c', "$i1"], 
+		['d', $fld->subfield('a')],
 		@{$self->isil5()}
 	    ]
 	    );
     }
-    else {
+    else { # won't be used, but should work anyway
 	$f = MARC::Moose::Field::Std->new(
 	    'tag' => $param->{'tag'},
 	    'ind1' => ' ',
 	    'ind2' => ' ',
 	    'subf' => [ 
-		['a', 'lcl'],
-		['b', $fld->subfield('a')],
+		['a', $self->language() eq 'fin' ? decode('UTF-8','lisätieto') : 'extra information'],
+		['b', "$i1"], 
+		['c', $fld->subfield('a')],
 		['9', 'finna-db' ],
 		@{$self->isil5()}
 	    ]
