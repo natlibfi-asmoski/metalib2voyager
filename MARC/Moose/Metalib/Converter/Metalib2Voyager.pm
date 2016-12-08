@@ -821,14 +821,14 @@ sub do546 {
 
     return $self->drop_546() ? ($cfield) : ($fld, $cfield);
 }
+my %statestrings = ('fin' => {'INACTIVE' => 'sammutettu', 'ACTIVE' => 'aktiivinen', 'TEST' => 'testi'},
+		    'swe' => {'INACTIVE' => 'inaktiv', 'ACTIVE' => 'aktiv', 'TEST' => 'test'});
 
 #   IRD status can be 'ACTIVE',	'INACTIVE', or 'TEST'.  Use field 988 to store it, with ind1
 #
 sub doSTA {
     my ($self, $fld, $rec, $param) = @_;
     my %states = ('INACTIVE' => 0, 'ACTIVE' => 1, 'TEST' => 2);
-    my %statestrings = ('fin' => {'INACTIVE' => 'sammutettu', 'ACTIVE' => 'aktiivinen', 'TEST' => 'testi'},
-			'swe' => {'INACTIVE' => 'inaktiv', 'ACTIVE' => 'aktiv', 'TEST' => 'test'});
 
     my $s = $fld->subfield('a');
     my $t;
@@ -895,13 +895,14 @@ sub deactivate {
     return if $self->dropstatus(); # nothing to update in the record itself
 
     my $flist = (ref $rec eq 'MARC::Moose::Record') ? $rec->fields() : $rec;
-
+    my $s = $statestrings{$self->language()}{'INACTIVE'};
     my $f;
     my $t = $self->hulibext();
+
     if($t eq  '') {    
 	foreach $f (@{$flist}) {
 	    if($f->tag() eq '988') {
-		$f-> subf([[ 'a', 'INACTIVE' ]]);
+		$f-> subf([[ 'a', $s ]]);
 		$f->ind1(0);
 		last;
 	    }
@@ -909,16 +910,16 @@ sub deactivate {
     }
     else {
 	foreach $f (@{$flist}) {
-	    if($f->tag() eq $t) {
-		$f->subf($t eq '886' ? 
+	    if($f->tag() eq $t && $f->subfield('a') eq 'status') {
+		$f->subf($t eq '886' ?
 			 [ [ '2', 'local' ],
 			   [ 'a', 'status' ],
 			   [ 'b', '00' ],
-			   [ 'c',  'INACTIVE' ],
+			   [ 'c',  $s ],
 			   @{$self->isil5()}
-			 ] :
+			 ]:
 			 [ [ 'a', 'status' ],
-			   [ 'b',  'INACTIVE' ],
+			   [ 'b',  $s ],
 			   [ '9', 'finna-db' ],
 			   @{$self->isil5()}
 			 ]
