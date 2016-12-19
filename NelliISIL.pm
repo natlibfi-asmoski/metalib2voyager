@@ -23,8 +23,8 @@ sub _build_ISILtable {
 #    'EKAMK' =>		[qw(FI-Ekaic FI-Ekaim FI-Ekals FI-Ekalt)],
     'EKAMK' =>		[qw(FI-Eka)],		# agreed with Pia Paavoseppä on Sep 30, 2016
     'EVTEK' =>		[qw(FI-Metag FI-Metbu FI-Metha FI-Metko FI-Metle FI-Metmy 
-                            FI-Meton FI-Metpo FI-Metso FI-Metti FI-Mettu FI-Metvi)],
-    'HAAGA' =>		[qw(FI-Hihi)],
+                            FI-Meton FI-Metpo FI-Metso FI-Metti FI-Mettu FI-Metvi)],  # declared zombie on Dec ?? by NN
+    'HAAGA' =>		[qw(FI-Hihi)],		# zombie
 #    'HAAGA-HELIA' =>	[qw(FI-Helib FI-Helip FI-Hihli FI-Himli FI-Hivli)],
     'HAAGA-HELIA' =>	[qw(FI-Helip)],		# agreed with Johanna Miettunen on Oct 10, 2016
 #    'HAMK' =>		[qw(FI-Hamk FI-Hamk-F FI-Hamk-La FI-Hamk-Le FI-Hamk-M FI-Hamk-E FI-Hamk-R FI-Hamkv)],
@@ -44,37 +44,40 @@ sub _build_ISILtable {
     'KAJAK' =>		[qw(FI-Kamk)],
 #    'KPAMK' =>		[qw(FI-Kphum FI-Kpkk FI-Kptes)],
     'KPAMK' =>		[qw(FI-Kpkk)],		# agreed with Päivi Toikkanen on Oct 12, 2016
-    'KTAMK' =>		[qw(FI-Ktah FI-Ktai FI-Ktao FI-Ktat)],
+#    'KTAMK' =>		[qw(FI-Ktah FI-Ktai FI-Ktao FI-Ktat)],
+    'KTAMK' =>		[qw(FI-Ktao)],		# agreed with Tiina Siro on Dec 12, 2016
 #    'KUVA' =>		[qw(FI-Tx FI-ARSCA)],    # BTW, KUVA is obsolete, SIBA is used for KUVA and TEAK
     'KUVA' =>		[qw(FI-Tx FI-Sib FI-SibK FI-Teat)],    # Agreed with Erkki Huttunen on Sep 8, 2016
 #    'KYAMK' =>		[qw(Fi-Kymka FI-Kymme FI-Kymte FI-Xamk)],
     'KYAMK' =>		[qw(FI-Xamk)],		# agreed with Mia Kujala on Oct 7, 2016
-    'LAUREA' =>		[qw(FI-Evahy FI-Evale FI-Evalo FI-Evalp FI-Evava FI-Laupo)],
+    'LAUREA' =>		[qw(FI-Evahy FI-Evale FI-Evalo FI-Evalp FI-Evava FI-Laupo)],		# ????
     'LTY' =>		[qw(FI-L)],		# agreed with Pia Paavoseppä on Sep 22, 2016
     'LY' =>		[qw(FI-R)],
 #    'MAMK' =>		[qw(FI-Mamk-M FI-Mamk-S FI-Xamk)],
     'MAMK' =>		[qw(FI-Xamk)],		# agreed with Mia Kujala on Oct 7, 2016
-    'METROPOLIA' =>	[qw(FI-Metag FI-Metbu FI-Metha FI-Metko FI-Metle FI-Metmy FI-Meton FI-Metpo
-       			    FI-Metso FI-Metti FI-Mettu FI-Metvi)],
-    'OAMK' =>		[qw(FI-Oakau FI-Oamok FI-Oaout FI-Oasot FI-Oatek)],
-    'OY' =>		[qw(FI-Oakau FI-Ol)],
+#    'METROPOLIA' =>	[qw(FI-Metag FI-Metbu FI-Metha FI-Metko FI-Metle FI-Metmy FI-Meton FI-Metpo
+#       			    FI-Metso FI-Metti FI-Mettu FI-Metvi)],
+    'METROPOLIA' =>	[qw(FI-Metro)],		# agreed with Päivi Ylitalo-Kallio on Dec 13, 2016
+    'OAMK' =>		[qw(FI-Oakau FI-Oamok FI-Oaout FI-Oasot FI-Oatek)],	# not included in this project
+#    'OY' =>		[qw(FI-Oakau FI-Ol)],
+    'OY' =>		[qw(FI-Ol)],		# guess...
 #    'PHKK' =>		[qw(FI-Lamk FI-Lakk(?) FI-Phfa FI-Phft FI-Phhe FI-Phmi FI-Phnt FI-Phot
 #			    FI-Phpa FI-Phpyk FI-Phso FI-Phst)],
     'PHKK' =>		[qw(FI-Lamk)], 		# agreed with Pertti Föhr on Nov 16, 2016
     'PKAMK' =>		[qw(FI-Kareli)],
-    'RAMK' =>		[qw(FI-Rkaup FI-Rm FI-Rteku FI-Rteso)],
+    'RAMK' =>		[qw(FI-Rkaup FI-Rm FI-Rteku FI-Rteso)], # not in use (Tiina Siro, 12.12.2016)
 #    'SAMK' =>		[qw(FI-Samk0 FI-Samk1 FI-Samk2 FI-Samk4 FI-Samk5 FI-Samk6 FI-Samk8 FI-Samk9 FI-Ttp)],
     'SAMK' =>		[qw(FI-Samk5)],		# agreed with Harri Salminen on Sep 30, 2016
-    'SAVONIA' =>	[qw(FI-Pssti FI-Psstk FI-Pstek FI-Pstew)],
+    'SAVONIA' =>	[qw(FI-Pssti FI-Psstk FI-Pstek FI-Pstew)],	# ????
 #    'SEAMK' =>		[qw(FI-Sekor FI-Sekau FI-Sekäs FI-Semaa FI-Semet FI-Serav FI-Seter)],
     'SEAMK' =>		[qw(FI-Sekor)],		# agreed with Jarkko Meronen on Sep 22, 2016
     'SHH' =>		[qw(FI-Z)],		# agreed with Mattias Nordling on Oct 5, 2016
     'SIBA' =>		[qw(FI-Tx FI-Sib FI-SibK FI-Teat)],    # Agreed with Erkki Huttunen on Sep 8, 2016
 #    'SIBA' =>		[qw(FI-Sib FI-SibK FI-ARSCA)],  
     'STADIA' =>		[qw(FI-Metag FI-Metbu FI-Metha FI-Metko FI-Metle FI-Metmy FI-Meton
-			    FI-Metpo FI-Metso FI-Metti FI-Mettu FI-Metvi)],
+			    FI-Metpo FI-Metso FI-Metti FI-Mettu FI-Metvi)],		# zombie
 #    'SYH' =>		[qw(FI-Vaz FI-Vaz-Jstad)],
-    'SYH' =>		[qw(FI-Vaz)],		# agreed with Christian Nelson on Sep 12, 2016
+    'SYH' =>		[qw(FI-Novia)],		# agreed with Christian Nelson on Dec 13, 2016
 #    'TAIK' =>		[qw(FI-Ta FI-Aalto)],
     'TAIK' =>		[qw(FI-Aalto)],		# agreed with Mari Aaltonen on Sep 23, 2016
 #    'TAMPERE' =>	[qw(FI-Tamk FI-Tamkt)],
@@ -89,7 +92,7 @@ sub _build_ISILtable {
     'TTY' =>		[qw(FI-Tt)],		# agreed with Ismo Raitanen on Nov 11, 2016
 #    'TUAMK' =>		[qw(FI-Tua FI-Tual FI-Tuas FI-Tuau FI-Tule FI-tuli FI-Turu FI-Tuse)],
     'TUAMK' =>		[qw(FI-Tua)],  		# agreed with Liisa Tiittanen on Sep 14, 2016
-    'TUKKK' =>		[qw(FI-F)],
+    'TUKKK' =>		[qw(FI-F)],		# zombie
 #    'TY' =>		[qw(FI-Ta FI-Tl FI-To FI-Tpo FI-Tro FI-Tyyk)],
     'TY' =>		[qw(FI-T)], 		# Agreed with Jouni Aaltonen on Sep 12, 2016
 #    'UEF' =>		[qw(FI-Jo FI-Jok FI-Jom FI-Jos FI-Jox FI-Ku)],
