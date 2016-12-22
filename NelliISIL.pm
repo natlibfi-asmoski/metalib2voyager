@@ -50,7 +50,8 @@ sub _build_ISILtable {
     'KUVA' =>		[qw(FI-Tx FI-Sib FI-SibK FI-Teat)],    # Agreed with Erkki Huttunen on Sep 8, 2016
 #    'KYAMK' =>		[qw(Fi-Kymka FI-Kymme FI-Kymte FI-Xamk)],
     'KYAMK' =>		[qw(FI-Xamk)],		# agreed with Mia Kujala on Oct 7, 2016
-    'LAUREA' =>		[qw(FI-Evahy FI-Evale FI-Evalo FI-Evalp FI-Evava FI-Laupo)],		# ????
+#    'LAUREA' =>		[qw(FI-Evahy FI-Evale FI-Evalo FI-Evalp FI-Evava FI-Laupo)],		# ????
+    'LAUREA' =>		[qw(FI-Evahy)],		# agreed with Hannu Jokiranta on Dec 22, 2016
     'LTY' =>		[qw(FI-L)],		# agreed with Pia Paavoseppä on Sep 22, 2016
     'LY' =>		[qw(FI-R)],
 #    'MAMK' =>		[qw(FI-Mamk-M FI-Mamk-S FI-Xamk)],
@@ -60,15 +61,16 @@ sub _build_ISILtable {
     'METROPOLIA' =>	[qw(FI-Metro)],		# agreed with Päivi Ylitalo-Kallio on Dec 13, 2016
     'OAMK' =>		[qw(FI-Oakau FI-Oamok FI-Oaout FI-Oasot FI-Oatek)],	# not included in this project
 #    'OY' =>		[qw(FI-Oakau FI-Ol)],
-    'OY' =>		[qw(FI-Ol)],		# guess...
+    'OY' =>		[qw(FI-O)],		# Agreed with Tiina Jounio on Dec 14, 2016
 #    'PHKK' =>		[qw(FI-Lamk FI-Lakk(?) FI-Phfa FI-Phft FI-Phhe FI-Phmi FI-Phnt FI-Phot
 #			    FI-Phpa FI-Phpyk FI-Phso FI-Phst)],
     'PHKK' =>		[qw(FI-Lamk)], 		# agreed with Pertti Föhr on Nov 16, 2016
     'PKAMK' =>		[qw(FI-Kareli)],
     'RAMK' =>		[qw(FI-Rkaup FI-Rm FI-Rteku FI-Rteso)], # not in use (Tiina Siro, 12.12.2016)
 #    'SAMK' =>		[qw(FI-Samk0 FI-Samk1 FI-Samk2 FI-Samk4 FI-Samk5 FI-Samk6 FI-Samk8 FI-Samk9 FI-Ttp)],
-    'SAMK' =>		[qw(FI-Samk5)],		# agreed with Harri Salminen on Sep 30, 2016
-    'SAVONIA' =>	[qw(FI-Pssti FI-Psstk FI-Pstek FI-Pstew)],	# ????
+    'SAMK' =>		[qw(FI-Samk)],		# agreed with Harri Salminen on Sep 30, 2016; changed by Jussi Kärki on Dec 20, 2016
+#    'SAVONIA' =>	[qw(FI-Pssti FI-Psstk FI-Pstek FI-Pstew)],	# ????
+    'SAVONIA' =>	[qw(FI-Psstk)],		# agreed with Jouni Jääskeläinen on Dec 20, 2016
 #    'SEAMK' =>		[qw(FI-Sekor FI-Sekau FI-Sekäs FI-Semaa FI-Semet FI-Serav FI-Seter)],
     'SEAMK' =>		[qw(FI-Sekor)],		# agreed with Jarkko Meronen on Sep 22, 2016
     'SHH' =>		[qw(FI-Z)],		# agreed with Mattias Nordling on Oct 5, 2016
