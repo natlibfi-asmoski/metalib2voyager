@@ -647,8 +647,9 @@ sub do245 {
     my $s;
 
     # The regexp below is the result of an empirical investigation of the data and should fit the need.
+    # Can't catch string "Käsikirjasto - [A-Z]" though: its length won't fit in a single digit indicator :(
     $fld->ind1('0');
-    $fld->ind2($t =~ m/(K.sikirjasto-[A-Z]|L\'|Le |The |Die |Der |Das)/go ? length($1) : 0);
+    $fld->ind2($t =~ m/(L\'|Le |The |Die |Der |Das)/go ? length($1) : 0);
 
     $t .= '.' if($self->dot245() && ($t !~ m/[?!\.]$/o)) ;
 
